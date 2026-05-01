@@ -1,0 +1,12 @@
+.git
+.venv
+__pycache__
+*.pyc
+temp
+sche_tasks
+worker.log
+server.log
+web/node_modules
+web/dist
+web/.env
+tests

@@ -7,6 +7,7 @@ if sys.stderr is None: sys.stderr = open(os.devnull, "w")
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from agent_loop import BaseHandler, StepOutcome, json_default
+from runtime_paths import runtime_path, code_path, temp_path
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
 def code_run(code, code_type="python", timeout=60, cwd=None, code_cwd=None, stop_signal=[]):
@@ -16,10 +17,10 @@ def code_run(code, code_type="python", timeout=60, cwd=None, code_cwd=None, stop
     优先使用python，仅在必要系统操作时使用powershell"""
     preview = (code[:60].replace('\n', ' ') + '...') if len(code) > 60 else code.strip()
     yield f"[Action] Running {code_type} in {os.path.basename(cwd)}: {preview}\n"
-    cwd = cwd or os.path.join(script_dir, 'temp'); tmp_path = None
+    cwd = cwd or str(temp_path()); tmp_path = None
     if code_type in ["python", "py"]:
         tmp_file = tempfile.NamedTemporaryFile(suffix=".ai.py", delete=False, mode='w', encoding='utf-8', dir=code_cwd)
-        cr_header = os.path.join(script_dir, 'assets', 'code_run_header.py')
+        cr_header = code_path('assets', 'code_run_header.py')
         if os.path.exists(cr_header): tmp_file.write(open(cr_header, encoding='utf-8').read())
         tmp_file.write(code)
         tmp_path = tmp_file.name
@@ -99,6 +100,10 @@ import simphtml
 driver = None
 def first_init_driver():
     global driver
+    if os.environ.get('GA_BROWSER_BACKEND') == 'playwright':
+        from server.app.browser.playwright_driver import PlaywrightDriver
+        driver = PlaywrightDriver(user_data_dir=os.environ.get('GA_BROWSER_PROFILE') or str(runtime_path('browser', 'workers', os.environ.get('GA_WORKER_ID', 'default'))))
+        return
     from TMWebDriver import TMWebDriver
     driver = TMWebDriver()
     for i in range(20):
@@ -152,7 +157,7 @@ def format_error(e):
 
 def log_memory_access(path):
     if 'memory' not in path: return
-    stats_file = os.path.join(script_dir, 'memory/file_access_stats.json')
+    stats_file = runtime_path('memory', 'file_access_stats.json')
     try:
         with open(stats_file, 'r', encoding='utf-8') as f: stats = json.load(f)
     except: stats = {}
@@ -501,7 +506,7 @@ class GenericAgentHandler(BaseHandler):
 **操作**：严格遵循提供的L0的记忆更新SOP。先 `file_read` 看现有 → 判断类型 → 最小化更新 → 无新内容跳过，保证对记忆库最小局部修改。\n
 ''' + get_global_memory()
         yield "[Info] Start distilling good memory for long-term storage.\n"
-        path = './memory/memory_management_sop.md'
+        path = str(runtime_path('memory', 'memory_management_sop.md'))
         if os.path.exists(path): result = '自动读取L0内容：\n' + file_read(path, show_linenos=False)
         else: result = "Memory Management SOP not found. Do not update memory."
         return StepOutcome(result, next_prompt=prompt)
@@ -551,10 +556,10 @@ def get_global_memory():
     prompt = "\n"
     try:
         suffix = '_en' if os.environ.get('GA_LANG', '') == 'en' else ''
-        with open(os.path.join(script_dir, 'memory/global_mem_insight.txt'), 'r', encoding='utf-8', errors='replace') as f: insight = f.read()
-        with open(os.path.join(script_dir, f'assets/insight_fixed_structure{suffix}.txt'), 'r', encoding='utf-8') as f: structure = f.read()
-        prompt += f'cwd = {os.path.join(script_dir, "temp")} (./)\n'
-        prompt += f"\n[Memory] (../memory)\n"
+        with open(runtime_path('memory', 'global_mem_insight.txt'), 'r', encoding='utf-8', errors='replace') as f: insight = f.read()
+        with open(code_path(f'assets/insight_fixed_structure{suffix}.txt'), 'r', encoding='utf-8') as f: structure = f.read()
+        prompt += f'cwd = {temp_path()} (./)\n'
+        prompt += f"\n[Memory] ({os.path.relpath(runtime_path('memory'), temp_path())})\n"
         prompt += structure + '\n../memory/global_mem_insight.txt:\n'
         prompt += insight + "\n"
     except FileNotFoundError: pass

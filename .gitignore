@@ -9,6 +9,14 @@ venv/
 env/
 build/
 dist/
+node_modules/
+web/node_modules/
+web/dist/
+web/.env.local
+web/.env.*.local
+web/*.tsbuildinfo
+web/vite.config.js
+web/vite.config.d.ts
 *.egg-info/
 
 .streamlit/

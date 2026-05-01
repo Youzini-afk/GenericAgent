@@ -1,10 +1,19 @@
-import os, json, re, time, requests, sys, threading, urllib3, base64, importlib, uuid
+import os, json, re, time, requests, sys, threading, urllib3, base64, importlib, importlib.util, uuid
 from datetime import datetime
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 _RESP_CACHE_KEY = str(uuid.uuid4())
 
 def _load_mykeys():
     global _mykey_path
+    env_path = os.environ.get('GA_MYKEY_PATH', '').strip()
+    if env_path:
+        _mykey_path = os.path.abspath(os.path.expanduser(env_path))
+        if not os.path.exists(_mykey_path): raise Exception(f'[ERROR] GA_MYKEY_PATH not found: {_mykey_path}')
+        if _mykey_path.endswith('.json'):
+            with open(_mykey_path, encoding='utf-8') as f: return json.load(f)
+        spec = importlib.util.spec_from_file_location('ga_runtime_mykey', _mykey_path)
+        mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+        return {k: v for k, v in vars(mod).items() if not k.startswith('_')}
     try:
         import mykey; importlib.reload(mykey); _mykey_path = mykey.__file__
         return {k: v for k, v in vars(mykey).items() if not k.startswith('_')}
@@ -850,7 +859,11 @@ def _parse_text_tool_calls(content):
     return tcs, content
 
 def _write_llm_log(label, content):
-    log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'temp/model_responses')
+    try:
+        from runtime_paths import temp_path
+        log_dir = str(temp_path('model_responses'))
+    except Exception:
+        log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'temp/model_responses')
     os.makedirs(log_dir, exist_ok=True)
     log_path = os.path.join(log_dir, f'model_responses_{os.getpid()}.txt')
     ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')

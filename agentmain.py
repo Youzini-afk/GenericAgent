@@ -9,22 +9,24 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from llmcore import reload_mykeys, LLMSession, ToolClient, ClaudeSession, MixinSession, NativeToolClient, NativeClaudeSession, NativeOAISession
 from agent_loop import agent_runner_loop
 from ga import GenericAgentHandler, smart_format, get_global_memory, format_error, consume_file
+from runtime_paths import runtime_path, code_path, temp_path, ensure_runtime_layout
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
+ensure_runtime_layout()
 def load_tool_schema(suffix=''):
     global TOOLS_SCHEMA
-    TS = open(os.path.join(script_dir, f'assets/tools_schema{suffix}.json'), 'r', encoding='utf-8').read()
+    TS = open(code_path(f'assets/tools_schema{suffix}.json'), 'r', encoding='utf-8').read()
     TOOLS_SCHEMA = json.loads(TS if os.name == 'nt' else TS.replace('powershell', 'bash'))
 load_tool_schema()
 
 lang_suffix = '_en' if os.environ.get('GA_LANG', '') == 'en' else ''
-mem_dir = os.path.join(script_dir, 'memory')
+mem_dir = str(runtime_path('memory'))
 if not os.path.exists(mem_dir): os.makedirs(mem_dir)
 mem_txt = os.path.join(mem_dir, 'global_mem.txt')
 if not os.path.exists(mem_txt): open(mem_txt, 'w', encoding='utf-8').write('# [Global Memory - L2]\n')
 mem_insight = os.path.join(mem_dir, 'global_mem_insight.txt')
 if not os.path.exists(mem_insight):
-    t = os.path.join(script_dir, f'assets/global_mem_insight_template{lang_suffix}.txt')
+    t = code_path(f'assets/global_mem_insight_template{lang_suffix}.txt')
     open(mem_insight, 'w', encoding='utf-8').write(open(t, encoding='utf-8').read() if os.path.exists(t) else '')
 cdp_cfg = os.path.join(script_dir, 'assets/tmwd_cdp_bridge/config.js')
 if not os.path.exists(cdp_cfg):
@@ -34,14 +36,14 @@ if not os.path.exists(cdp_cfg):
     except Exception as e: print(f'[WARN] CDP config init failed: {e} — advanced web features (tmwebdriver) will be unavailable.')
 
 def get_system_prompt():
-    with open(os.path.join(script_dir, f'assets/sys_prompt{lang_suffix}.txt'), 'r', encoding='utf-8') as f: prompt = f.read()
+    with open(code_path(f'assets/sys_prompt{lang_suffix}.txt'), 'r', encoding='utf-8') as f: prompt = f.read()
     prompt += f"\nToday: {time.strftime('%Y-%m-%d %a')}\n"
     prompt += get_global_memory()
     return prompt
 
 class GeneraticAgent:
     def __init__(self):
-        os.makedirs(os.path.join(script_dir, 'temp'), exist_ok=True)
+        os.makedirs(temp_path(), exist_ok=True)
         self.lock = threading.Lock()
         self.task_dir = None
         self.history = []
@@ -113,7 +115,7 @@ class GeneraticAgent:
         if not raw_query.startswith('/'): return raw_query
         if _sm := re.match(r'/session\.(\w+)=(.*)', raw_query.strip()):
             k, v = _sm.group(1), _sm.group(2)
-            vfile = os.path.join(script_dir, 'temp', v)
+            vfile = temp_path(v)
             if os.path.isfile(vfile): v = open(vfile, encoding='utf-8').read().strip()
             try: v = json.loads(v)  # cover number parsing
             except (json.JSONDecodeError, ValueError): pass
@@ -136,7 +138,7 @@ class GeneraticAgent:
             self.history.append(f"[USER]: {rquery}")
             
             sys_prompt = get_system_prompt() + getattr(self.llmclient.backend, 'extra_sys_prompt', '')
-            handler = GenericAgentHandler(self, self.history, os.path.join(script_dir, 'temp'))
+            handler = GenericAgentHandler(self, self.history, str(temp_path()))
             if self.handler and 'key_info' in self.handler.working: 
                 ki = re.sub(r'\n\[SYSTEM\] 此为.*?工作记忆[。\n]*', '', self.handler.working['key_info'])  # 去旧
                 handler.working['key_info'] = ki
@@ -187,7 +189,7 @@ if __name__ == '__main__':
     if args.bg:
         import subprocess, platform
         cmd = [sys.executable, os.path.abspath(__file__)] + [a for a in sys.argv[1:] if a != '--bg']
-        d = os.path.join(script_dir, f'temp/{args.task}'); os.makedirs(d, exist_ok=True)
+        d = str(temp_path(args.task)); os.makedirs(d, exist_ok=True)
         p = subprocess.Popen(cmd, cwd=script_dir,
             creationflags=0x08000000 if platform.system() == 'Windows' else 0,
             stdout=open(os.path.join(d, 'stdout.log'), 'w', encoding='utf-8'),
@@ -200,7 +202,7 @@ if __name__ == '__main__':
     threading.Thread(target=agent.run, daemon=True).start()
 
     if args.task:
-        agent.task_dir = d = os.path.join(script_dir, f'temp/{args.task}'); nround = ''
+        agent.task_dir = d = str(temp_path(args.task)); nround = ''
         infile = os.path.join(d, 'input.txt')
         if args.input:
             os.makedirs(d, exist_ok=True)

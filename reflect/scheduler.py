@@ -1,5 +1,8 @@
 import os, json, time as _time, socket as _socket, logging
 from datetime import datetime, timedelta
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from runtime_paths import runtime_path
 
 # 端口锁：防止重复启动，bind失败时agentmain会直接崩溃退出
 # reload时mod.__dict__保留_lock，跳过重复绑定
@@ -12,9 +15,9 @@ INTERVAL = 120
 ONCE = False
 
 _dir = os.path.dirname(os.path.abspath(__file__))
-TASKS = os.path.join(_dir, '../sche_tasks')
-DONE  = os.path.join(_dir, '../sche_tasks/done')
-_LOG  = os.path.join(_dir, '../sche_tasks/scheduler.log')
+TASKS = str(runtime_path('sche_tasks'))
+DONE  = str(runtime_path('sche_tasks', 'done'))
+_LOG  = str(runtime_path('sche_tasks', 'scheduler.log'))
 
 # --- 日志 ---
 _logger = logging.getLogger('scheduler')
