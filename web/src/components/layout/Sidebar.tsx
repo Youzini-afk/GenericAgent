@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { PageKey } from "../../lib/types";
 import type { I18nKey, T } from "../../lib/i18n";
 import { Activity, Bot, ClipboardList, LogOut, MessageSquare, Settings2 } from "lucide-react";
@@ -12,14 +12,21 @@ const mainNav: Array<{ key: PageKey; labelKey: I18nKey; icon: ReactNode }> = [
 export function Sidebar({ page, setPage, t, onLogout }: {
   page: PageKey; setPage: (p: PageKey) => void; t: T; onLogout: () => void;
 }) {
+  const [collapsed, setCollapsed] = useState(true);
+
   return (
-    <aside className="app-sidebar-rail">
-      <div className="app-sidebar-brand">
+    <aside className="app-sidebar-rail" data-collapsed={collapsed ? "true" : "false"}>
+      <button
+        type="button"
+        className="app-sidebar-brand"
+        onClick={() => setCollapsed((c) => !c)}
+        title={collapsed ? "展开侧边栏" : "收起侧边栏"}
+      >
         <Bot size={20} style={{ flexShrink: 0 }} />
-        <span>GenericAgent</span>
-      </div>
+        {!collapsed && <span>GenericAgent</span>}
+      </button>
       <nav className="app-sidebar-nav">
-        <div className="app-sidebar-guide" />
+        {!collapsed && <div className="app-sidebar-guide" />}
         {mainNav.map((item) => (
           <button
             key={item.key}
@@ -27,9 +34,10 @@ export function Sidebar({ page, setPage, t, onLogout }: {
             onClick={() => setPage(item.key)}
             className="app-sidebar-item"
             data-active={page === item.key ? "true" : "false"}
+            title={collapsed ? t(item.labelKey) : undefined}
           >
             <span className="app-sidebar-icon">{item.icon}</span>
-            <span className="app-sidebar-label">{t(item.labelKey)}</span>
+            {!collapsed && <span className="app-sidebar-label">{t(item.labelKey)}</span>}
           </button>
         ))}
       </nav>
@@ -39,13 +47,14 @@ export function Sidebar({ page, setPage, t, onLogout }: {
           onClick={() => setPage("settings")}
           className="app-sidebar-item"
           data-active={page === "settings" ? "true" : "false"}
+          title={collapsed ? t("nav.settings") : undefined}
         >
           <span className="app-sidebar-icon"><Settings2 size={16} /></span>
-          <span className="app-sidebar-label">{t("nav.settings")}</span>
+          {!collapsed && <span className="app-sidebar-label">{t("nav.settings")}</span>}
         </button>
-        <button type="button" onClick={onLogout} className="app-sidebar-logout">
+        <button type="button" onClick={onLogout} className="app-sidebar-logout" title={collapsed ? t("common.logout") : undefined}>
           <LogOut size={14} />
-          <span className="app-sidebar-label">{t("common.logout")}</span>
+          {!collapsed && <span className="app-sidebar-label">{t("common.logout")}</span>}
         </button>
       </div>
     </aside>

@@ -226,11 +226,22 @@ select option { background: var(--color-card); color: var(--color-foreground); }
   border-right: 1px solid var(--color-border);
   overflow-y: auto;
   flex: 0 0 clamp(220px, 16vw, 260px);
+  transition: width 180ms ease, min-width 180ms ease, flex-basis 180ms ease;
+}
+
+.app-sidebar-rail[data-collapsed="true"] {
+  width: 52px;
+  min-width: 52px;
+  max-width: 52px;
+  flex: 0 0 52px;
+  padding: 12px 6px;
+  overflow: hidden;
 }
 
 .app-sidebar-brand {
   height: 40px;
   min-height: 40px;
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -239,6 +250,22 @@ select option { background: var(--color-card); color: var(--color-foreground); }
   font-weight: 700;
   margin-bottom: 4px;
   overflow: hidden;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: var(--color-foreground);
+  cursor: pointer;
+  text-align: left;
+  transition: background 120ms;
+}
+
+.app-sidebar-brand:hover {
+  background: var(--color-accent);
+}
+
+.app-sidebar-rail[data-collapsed="true"] .app-sidebar-brand {
+  justify-content: center;
+  padding: 0;
 }
 
 .app-sidebar-brand span {
@@ -282,6 +309,15 @@ select option { background: var(--color-card); color: var(--color-foreground); }
   text-align: left;
   font-size: 13px;
   transition: background 120ms, color 120ms;
+}
+
+.app-sidebar-rail[data-collapsed="true"] .app-sidebar-item,
+.app-sidebar-rail[data-collapsed="true"] .app-sidebar-logout {
+  justify-content: center;
+  padding: 0;
+  width: 36px;
+  border-radius: 8px;
+  align-self: center;
 }
 
 .app-sidebar-item[data-active="true"] {
