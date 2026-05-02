@@ -1,10 +1,32 @@
-# GenericAgent Zeabur 部署
+# GenericAgent Zeabur 单服务部署
 
-## Backend
+GenericAgent Web 版现在按一个 Zeabur Docker 服务部署。镜像构建时会先编译 `web/` React 前端，再由 FastAPI 同时提供：
 
-在 Zeabur 新建 Docker 服务，Root Directory 指向仓库根目录。
+- `/`：WebUI
+- `/assets/*`：前端静态资源
+- `/api/*`：Backend API
+- `/ws/*`：任务事件 WebSocket
 
-环境变量：
+## 新建服务
+
+在 Zeabur 新建 Project，然后添加 GitHub 服务：
+
+- Repository：`Youzini-afk/GenericAgent`
+- Branch：`main`
+- Root Directory：仓库根目录
+- 部署方式：Dockerfile
+
+Zeabur 会使用根目录 `Dockerfile` 构建单服务镜像。
+
+## 环境变量
+
+必填：
+
+```env
+GA_ADMIN_PASSWORD=<your-private-password>
+```
+
+推荐：
 
 ```env
 GA_DATA_DIR=/data
@@ -14,41 +36,21 @@ GA_MAX_QUEUE_SIZE=100
 GA_TASK_TIMEOUT_SECONDS=3600
 GA_BROWSER_BACKEND=playwright
 GA_BROWSER_NO_SANDBOX=1
-GA_ADMIN_PASSWORD=<required>
-GA_ALLOWED_ORIGINS=https://<frontend-domain>
 ```
 
-挂载 Volume：
+单服务同域名访问时通常不需要配置 `GA_ALLOWED_ORIGINS`。如果你想显式限制，可以设成服务自己的 Zeabur 域名：
+
+```env
+GA_ALLOWED_ORIGINS=https://<your-service-domain>
+```
+
+## Volume
+
+给服务挂载一个 Volume：
 
 ```text
 /data
 ```
-
-启动命令由 Dockerfile 提供：
-
-```sh
-uvicorn server.app.main:app --host 0.0.0.0 --port ${PORT:-8080}
-```
-
-不要额外配置 `uvicorn --workers`。多 Agent 并发由 Backend 内部 worker pool 管理。
-
-## Frontend
-
-新建 Node.js 服务，Root Directory 指向 `web/`。
-
-构建命令：
-
-```sh
-npm ci && npm run build
-```
-
-环境变量：
-
-```env
-VITE_API_BASE_URL=https://<backend-domain>
-```
-
-## 持久化目录
 
 Backend 会把运行数据放到 `/data`：
 
@@ -64,3 +66,31 @@ Backend 会把运行数据放到 `/data`：
 ```
 
 首次启动会把仓库内 `memory/` 的种子文件补到 `/data/memory`，已有文件不会覆盖。
+
+## 访问
+
+部署完成后直接打开 Zeabur 服务域名：
+
+```text
+https://<your-service-domain>/
+```
+
+登录密码就是 `GA_ADMIN_PASSWORD`。
+
+健康检查：
+
+```text
+https://<your-service-domain>/api/health
+```
+
+应返回：
+
+```json
+{"ok": true}
+```
+
+## 注意事项
+
+- 不要给 Uvicorn 配 `--workers`。多 Agent 并发由 `GA_WORKER_CONCURRENCY` 控制。
+- 第一版不支持水平扩容多个 Backend 实例，Zeabur 保持一个服务实例即可。
+- 前端现在由 FastAPI 托管，不需要单独部署 `web/` 服务，也不需要配置 `VITE_API_BASE_URL`。

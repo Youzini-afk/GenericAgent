@@ -1,6 +1,7 @@
 import os
 import tempfile
 import unittest
+from pathlib import Path
 
 
 class ServerApiTests(unittest.TestCase):
@@ -11,6 +12,12 @@ class ServerApiTests(unittest.TestCase):
         os.environ["GA_MYKEY_PATH"] = os.path.join(self.tmp.name, "mykey.py")
         os.environ["GA_ADMIN_PASSWORD"] = "secret"
         os.environ["GA_WORKER_CONCURRENCY"] = "0"
+        self.web_dist = Path(self.tmp.name) / "webdist"
+        self.web_dist.mkdir()
+        (self.web_dist / "index.html").write_text("<html><body>GenericAgent SPA</body></html>", encoding="utf-8")
+        (self.web_dist / "assets").mkdir()
+        (self.web_dist / "assets" / "app.js").write_text("console.log('ok')", encoding="utf-8")
+        os.environ["GA_WEB_DIST_DIR"] = str(self.web_dist)
 
     def tearDown(self):
         os.environ.clear()
@@ -35,6 +42,24 @@ class ServerApiTests(unittest.TestCase):
         response = client.get("/api/status", headers={"Authorization": f"Bearer {token}"})
         self.assertEqual(response.status_code, 200)
         self.assertIn("data_dir", response.json())
+
+    def test_single_service_serves_spa_without_shadowing_api(self):
+        client = self._client()
+        root = client.get("/")
+        self.assertEqual(root.status_code, 200)
+        self.assertIn("GenericAgent SPA", root.text)
+
+        deep_link = client.get("/queue/tasks")
+        self.assertEqual(deep_link.status_code, 200)
+        self.assertIn("GenericAgent SPA", deep_link.text)
+
+        asset = client.get("/assets/app.js")
+        self.assertEqual(asset.status_code, 200)
+        self.assertIn("console.log", asset.text)
+
+        health = client.get("/api/health")
+        self.assertEqual(health.status_code, 200)
+        self.assertEqual(health.json(), {"ok": True})
 
     def test_chat_message_enqueues_task_and_events_are_readable(self):
         client = self._client()

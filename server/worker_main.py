@@ -12,13 +12,18 @@ from server.app.workers.protocol import decode_message, send_stdout
 
 def _fake_run(worker_id: str, task: dict, stop: threading.Event) -> None:
     task_id = task["id"]
+    steps = int(os.environ.get("GA_WORKER_FAKE_STEPS", "2") or 2)
+    delay = float(os.environ.get("GA_WORKER_FAKE_DELAY", "0.05") or 0.05)
     send_stdout("task_started", worker_id=worker_id, task_id=task_id)
-    for i in range(2):
+    for i in range(steps):
         if stop.is_set():
             send_stdout("task_finished", worker_id=worker_id, task_id=task_id, status="canceled", error="")
             return
         send_stdout("next", worker_id=worker_id, task_id=task_id, text=f"fake chunk {i + 1}")
-        time.sleep(0.05)
+        time.sleep(delay)
+    if stop.is_set():
+        send_stdout("task_finished", worker_id=worker_id, task_id=task_id, status="canceled", error="")
+        return
     send_stdout("done", worker_id=worker_id, task_id=task_id, text="fake done")
     send_stdout("task_finished", worker_id=worker_id, task_id=task_id, status="succeeded", error="")
 

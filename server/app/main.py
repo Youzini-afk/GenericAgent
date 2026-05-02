@@ -4,13 +4,16 @@ import os
 import base64
 import asyncio
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from runtime_paths import ensure_runtime_layout, mykey_path, runtime_path
+from runtime_paths import code_path, ensure_runtime_layout, mykey_path, runtime_path
 from server.app.browser.manager import BrowserRegistry
 from server.app.core.auth import AuthManager
 from server.app.queue.store import QueueStore
@@ -93,6 +96,13 @@ def _settings() -> dict[str, Any]:
         scheduler = SchedulerService(store, poll_interval=float(os.environ.get("GA_SCHEDULER_POLL_SECONDS", "30") or 30))
     browsers = BrowserRegistry(fake=os.environ.get("GA_BROWSER_FAKE") == "1")
     return {"data_dir": str(data), "auth": auth, "store": store, "pool": pool, "scheduler": scheduler, "browsers": browsers}
+
+
+def _web_dist_dir() -> Path:
+    configured = os.environ.get("GA_WEB_DIST_DIR", "").strip()
+    if configured:
+        return Path(configured).expanduser().resolve()
+    return code_path("web", "dist")
 
 
 def create_app() -> FastAPI:
@@ -401,6 +411,27 @@ def create_app() -> FastAPI:
                     pass
         except WebSocketDisconnect:
             return
+
+    web_dist = _web_dist_dir()
+    assets_dir = web_dist / "assets"
+    index_html = web_dist / "index.html"
+    if assets_dir.is_dir():
+        app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    def spa_fallback(full_path: str):
+        if full_path.startswith("api/") or full_path == "api":
+            raise HTTPException(status_code=404, detail="not found")
+        if not index_html.exists():
+            raise HTTPException(status_code=404, detail="web frontend is not built")
+        target = (web_dist / full_path).resolve() if full_path else index_html
+        try:
+            target.relative_to(web_dist.resolve())
+        except ValueError:
+            target = index_html
+        if target.is_file() and target.name != "index.html":
+            return FileResponse(str(target))
+        return FileResponse(str(index_html))
 
     return app
 

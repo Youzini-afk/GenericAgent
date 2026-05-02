@@ -224,7 +224,7 @@ class WorkerPool:
             text = event.get("text", "")
             self.store.append_event(task_id, "done", {"text": text, "worker_id": worker.worker_id})
             task = self.store.get_task(task_id)
-            if task and task.get("kind") == "chat":
+            if task and task.get("kind") == "chat" and not task.get("cancel_requested"):
                 try:
                     self.store.add_message(task["session_id"], "assistant", str(text or ""), task_id=task_id)
                 except Exception:
@@ -234,6 +234,9 @@ class WorkerPool:
         elif etype == "task_finished" and task_id:
             status = event.get("status") or "failed"
             error = event.get("error", "")
+            task = self.store.get_task(task_id)
+            if task and task.get("cancel_requested") and status == "succeeded":
+                status = "canceled"
             self.store.finish_task(task_id, status, error=error, emit_event=False)
             worker.current_task_id = None
             if getattr(worker, "needs_reload", False):

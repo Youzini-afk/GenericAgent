@@ -1,3 +1,14 @@
+FROM node:22-bookworm-slim AS web-build
+
+WORKDIR /src/web
+
+COPY web/package*.json ./
+RUN npm ci
+
+COPY web/ ./
+RUN npm run build
+
+
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -17,6 +28,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY . /app
+COPY --from=web-build /src/web/dist /app/web/dist
 
 RUN python -m pip install --no-cache-dir --upgrade pip \
     && python -m pip install --no-cache-dir ".[server]" \

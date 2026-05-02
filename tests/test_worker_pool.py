@@ -154,6 +154,30 @@ class WorkerPoolTests(unittest.TestCase):
         self.assertEqual(messages[-1]["role"], "assistant")
         self.assertEqual(messages[-1]["content"], "answer")
 
+    def test_cancel_requested_task_cannot_finish_as_succeeded(self):
+        from server.app.queue.store import QueueStore
+        from server.app.workers.pool import WorkerPool
+
+        class Worker:
+            worker_id = "worker-1"
+            current_task_id = None
+
+            def send(self, command, **payload):
+                pass
+
+        store = QueueStore(os.path.join(self.tmp.name, "app.db"))
+        task_id = store.enqueue_task("chat", "s1", {"text": "race"})
+        store.lease_next_task("worker-1")
+        store.mark_task_running(task_id, "worker-1")
+        store.request_cancel(task_id)
+        worker = Worker()
+        worker.current_task_id = task_id
+        pool = WorkerPool(store, concurrency=1, data_dir=self.tmp.name, poll_interval=0.05)
+
+        pool._handle_event(worker, {"event": "task_finished", "task_id": task_id, "status": "succeeded"})
+
+        self.assertEqual(store.get_task(task_id)["status"], "canceled")
+
 
 if __name__ == "__main__":
     unittest.main()
