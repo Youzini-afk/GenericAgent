@@ -19,25 +19,24 @@ export function AppShell({
   children: ReactNode;
 }) {
   return (
-    <div style={{ position: "fixed", inset: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+    <div className="app-shell-root">
       <TopBar t={t} lang={lang} setLang={setLang} workers={workers} activeTasks={activeTasks} status={status} />
-      <PanelGroup orientation="vertical" style={{ flex: 1, minHeight: 0 }}>
+      <PanelGroup orientation="vertical" className="app-shell-vertical">
         <Panel defaultSize={76} minSize={45}>
-          <PanelGroup orientation="horizontal" style={{ height: "100%" }}>
-            <Panel defaultSize={15} minSize={11} maxSize={24}>
-              <Sidebar page={page} setPage={setPage} t={t} onLogout={onLogout} />
-            </Panel>
-            <PanelResizeHandle className="resize-handle resize-handle-vertical" />
-            <Panel defaultSize={62} minSize={36}>
-              <main style={{ height: "100%", minWidth: 0, overflow: "auto", padding: 18, background: "var(--color-background)" }}>
-                {children}
-              </main>
-            </Panel>
-            <PanelResizeHandle className="resize-handle resize-handle-vertical" />
-            <Panel defaultSize={23} minSize={16} maxSize={38}>
-              <AuxPanel t={t} runDetail={runDetail} />
-            </Panel>
-          </PanelGroup>
+          <div className="app-shell-body">
+            <Sidebar page={page} setPage={setPage} t={t} onLogout={onLogout} />
+            <PanelGroup orientation="horizontal" className="app-shell-workspace">
+              <Panel defaultSize={70} minSize={48}>
+                <main className="app-shell-main">
+                  {children}
+                </main>
+              </Panel>
+              <PanelResizeHandle className="resize-handle resize-handle-vertical" />
+              <Panel defaultSize={30} minSize={18} maxSize={42}>
+                <AuxPanel t={t} runDetail={runDetail} />
+              </Panel>
+            </PanelGroup>
+          </div>
         </Panel>
         <PanelResizeHandle className="resize-handle resize-handle-horizontal" />
         <Panel defaultSize={24} minSize={5} maxSize={42}>

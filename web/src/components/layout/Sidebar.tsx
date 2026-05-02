@@ -22,17 +22,13 @@ const navItems: Array<{ key: PageKey; labelKey: I18nKey; icon: ReactNode }> = [
 
 export function Sidebar({ page, setPage, t, onLogout }: { page: PageKey; setPage: (p: PageKey) => void; t: T; onLogout: () => void }) {
   return (
-    <aside style={{
-      width: "100%", height: "100%", minWidth: 0, display: "flex", flexDirection: "column", gap: 4,
-      padding: "12px 8px", background: "var(--color-sidebar)",
-      borderRight: "1px solid var(--color-border)", overflowY: "auto", flexShrink: 0
-    }}>
-      <div style={{ height: 40, display: "flex", alignItems: "center", gap: 8, padding: "0 10px", fontWeight: 700, marginBottom: 4 }}>
-        <Bot size={20} />
-        <span style={{ fontSize: 14 }}>GenericAgent</span>
+    <aside className="app-sidebar-rail">
+      <div className="app-sidebar-brand">
+        <Bot size={20} style={{ flexShrink: 0 }} />
+        <span>GenericAgent</span>
       </div>
-      <nav style={{ position: "relative", display: "flex", flexDirection: "column", gap: 1 }}>
-        <div style={{ position: "absolute", left: 14, top: 0, bottom: 0, width: 2, background: "var(--color-border)" }} />
+      <nav className="app-sidebar-nav">
+        <div className="app-sidebar-guide" />
         {navItems.map((item) => {
           const active = page === item.key;
           return (
@@ -40,19 +36,12 @@ export function Sidebar({ page, setPage, t, onLogout }: { page: PageKey; setPage
               key={item.key}
               type="button"
               onClick={() => setPage(item.key)}
-              style={{
-                height: 31, display: "flex", alignItems: "center", gap: 8,
-                padding: "0 12px", borderRadius: 9999, border: 0, textAlign: "left",
-                background: active ? "oklch(0.985 0 0 / 8%)" : "transparent",
-                color: active ? "var(--color-foreground)" : "var(--color-muted-foreground)",
-                fontWeight: active ? 600 : 400, fontSize: 13,
-                transition: "background 120ms, color 120ms", cursor: "pointer"
-              }}
-              onMouseEnter={(e) => { if (!active) { (e.currentTarget as HTMLButtonElement).style.background = "var(--color-accent)"; (e.currentTarget as HTMLButtonElement).style.color = "var(--color-foreground)"; } }}
-              onMouseLeave={(e) => { if (!active) { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; (e.currentTarget as HTMLButtonElement).style.color = "var(--color-muted-foreground)"; } }}
+              className="app-sidebar-item"
+              data-active={active ? "true" : "false"}
+              aria-current={active ? "page" : undefined}
             >
-              <span style={{ color: active ? "var(--color-foreground)" : "var(--color-muted-foreground)", flexShrink: 0 }}>{item.icon}</span>
-              {t(item.labelKey)}
+              <span className="app-sidebar-icon">{item.icon}</span>
+              <span className="app-sidebar-label">{t(item.labelKey)}</span>
             </button>
           );
         })}
@@ -60,14 +49,10 @@ export function Sidebar({ page, setPage, t, onLogout }: { page: PageKey; setPage
       <button
         type="button"
         onClick={onLogout}
-        style={{
-          marginTop: "auto", height: 31, display: "flex", alignItems: "center", gap: 8,
-          padding: "0 12px", borderRadius: 9999, border: 0, background: "transparent",
-          color: "var(--color-destructive)", fontSize: 13, cursor: "pointer"
-        }}
+        className="app-sidebar-logout"
       >
         <LogOut size={14} />
-        {t("common.logout")}
+        <span className="app-sidebar-label">{t("common.logout")}</span>
       </button>
     </aside>
   );

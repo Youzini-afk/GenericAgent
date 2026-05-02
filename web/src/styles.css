@@ -177,6 +177,144 @@ select option { background: var(--color-card); color: var(--color-foreground); }
 .language-select select:focus { box-shadow: none; }
 
 /* App shell */
+.app-shell-root {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.app-shell-vertical {
+  flex: 1;
+  min-height: 0;
+}
+
+.app-shell-body {
+  height: 100%;
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  overflow: hidden;
+  background: var(--color-background);
+}
+
+.app-shell-workspace {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+
+.app-shell-main {
+  height: 100%;
+  min-width: 0;
+  overflow: auto;
+  padding: 18px;
+  background: var(--color-background);
+}
+
+.app-sidebar-rail {
+  width: clamp(220px, 16vw, 260px);
+  min-width: 220px;
+  max-width: 260px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 8px;
+  background: var(--color-sidebar);
+  border-right: 1px solid var(--color-border);
+  overflow-y: auto;
+  flex: 0 0 clamp(220px, 16vw, 260px);
+}
+
+.app-sidebar-brand {
+  height: 40px;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 4px;
+  overflow: hidden;
+}
+
+.app-sidebar-brand span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-sidebar-nav {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.app-sidebar-guide {
+  position: absolute;
+  left: 14px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--color-border);
+  pointer-events: none;
+}
+
+.app-sidebar-item,
+.app-sidebar-logout {
+  width: 100%;
+  height: 31px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--color-muted-foreground);
+  text-align: left;
+  font-size: 13px;
+  transition: background 120ms, color 120ms;
+}
+
+.app-sidebar-item[data-active="true"] {
+  background: oklch(0.985 0 0 / 8%);
+  color: var(--color-foreground);
+  font-weight: 600;
+}
+
+.app-sidebar-item:hover,
+.app-sidebar-logout:hover {
+  background: var(--color-accent);
+  color: var(--color-foreground);
+}
+
+.app-sidebar-icon,
+.app-sidebar-logout svg {
+  flex: 0 0 auto;
+  display: inline-flex;
+  color: currentColor;
+}
+
+.app-sidebar-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-sidebar-logout {
+  margin-top: auto;
+  color: var(--color-destructive);
+}
+
 .app-shell {
   min-height: 100vh;
   display: grid;
@@ -518,6 +656,16 @@ strong { color: var(--color-foreground); }
 * { scrollbar-width: thin; scrollbar-color: var(--color-accent) transparent; }
 
 @media (max-width: 960px) {
+  .app-sidebar-rail {
+    width: 204px;
+    min-width: 204px;
+    flex-basis: 204px;
+  }
+
+  .app-shell-main {
+    padding: 14px;
+  }
+
   .app-shell { grid-template-columns: 1fr; }
   .sidebar { min-height: auto; flex-direction: row; align-items: center; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--color-border); }
   .sidebar nav { display: flex; min-width: max-content; }
@@ -527,4 +675,57 @@ strong { color: var(--color-foreground); }
   .chat-grid, .split, .two-column, .two-column.wide-left { height: auto; min-height: 0; grid-template-columns: 1fr; }
   .message.user, .message.agent { max-width: 100%; }
   .composer { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 760px) {
+  .app-shell-body {
+    flex-direction: column;
+  }
+
+  .app-sidebar-rail {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    height: 56px;
+    flex: 0 0 56px;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    border-right: 0;
+    border-bottom: 1px solid var(--color-border);
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .app-sidebar-brand {
+    width: 152px;
+    min-width: 152px;
+    height: 36px;
+    min-height: 36px;
+    margin-bottom: 0;
+  }
+
+  .app-sidebar-nav {
+    flex: 0 0 auto;
+    flex-direction: row;
+    min-width: max-content;
+    gap: 4px;
+  }
+
+  .app-sidebar-guide {
+    display: none;
+  }
+
+  .app-sidebar-item,
+  .app-sidebar-logout {
+    width: auto;
+    min-width: max-content;
+    height: 34px;
+  }
+
+  .app-sidebar-logout {
+    margin-top: 0;
+    flex: 0 0 auto;
+  }
 }
