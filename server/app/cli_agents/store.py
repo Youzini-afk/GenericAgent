@@ -11,6 +11,36 @@ from typing import Any
 FINAL_STATUSES = {"succeeded", "failed", "canceled", "interrupted"}
 ACTIVE_STATUSES = {"pending", "preparing", "running"}
 SECRET_MARKERS = ("key", "token", "secret", "password", "credential", "cookie")
+DEFAULT_PROVIDER_PROFILES = {
+    "codex": {
+        "strengths": ["large_refactor", "complex_code_understanding"],
+        "weaknesses": [],
+        "recent_success": 0,
+        "recent_failure": 0,
+        "notes": [],
+    },
+    "claude_code": {
+        "strengths": ["frontend", "context_judgement", "review"],
+        "weaknesses": [],
+        "recent_success": 0,
+        "recent_failure": 0,
+        "notes": [],
+    },
+    "opencode": {
+        "strengths": ["ordinary_implementation", "small_medium_tasks"],
+        "weaknesses": [],
+        "recent_success": 0,
+        "recent_failure": 0,
+        "notes": [],
+    },
+    "custom_shell": {
+        "strengths": ["verify", "script", "fallback"],
+        "weaknesses": [],
+        "recent_success": 0,
+        "recent_failure": 0,
+        "notes": [],
+    },
+}
 
 
 class CliAgentStore:
@@ -88,6 +118,16 @@ class CliAgentStore:
                     mode TEXT NOT NULL,
                     created_at REAL NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS cli_provider_profiles (
+                    provider TEXT PRIMARY KEY,
+                    strengths_json TEXT NOT NULL,
+                    weaknesses_json TEXT NOT NULL,
+                    recent_success INTEGER NOT NULL DEFAULT 0,
+                    recent_failure INTEGER NOT NULL DEFAULT 0,
+                    notes_json TEXT NOT NULL,
+                    created_at REAL NOT NULL,
+                    updated_at REAL NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS task_events (
                     seq INTEGER PRIMARY KEY AUTOINCREMENT,
                     task_id TEXT NOT NULL,
@@ -140,6 +180,134 @@ class CliAgentStore:
         data = dict(row)
         data["payload"] = json.loads(data.pop("payload_json") or "{}")
         return data
+
+    @staticmethod
+    def _provider_profile_row(row: sqlite3.Row | None) -> dict[str, Any] | None:
+        if row is None:
+            return None
+        data = dict(row)
+        data["strengths"] = json.loads(data.pop("strengths_json") or "[]")
+        data["weaknesses"] = json.loads(data.pop("weaknesses_json") or "[]")
+        data["notes"] = json.loads(data.pop("notes_json") or "[]")
+        return data
+
+    @staticmethod
+    def _unique_list(values: list[Any]) -> list[str]:
+        result: list[str] = []
+        for value in values or []:
+            text = str(value or "").strip()
+            if text and text not in result:
+                result.append(text)
+        return result
+
+    def ensure_provider_profiles(self) -> None:
+        now = time.time()
+        with self._connect() as conn:
+            for provider, profile in DEFAULT_PROVIDER_PROFILES.items():
+                existing = conn.execute("SELECT provider FROM cli_provider_profiles WHERE provider=?", (provider,)).fetchone()
+                if existing:
+                    continue
+                conn.execute(
+                    """
+                    INSERT INTO cli_provider_profiles(
+                        provider, strengths_json, weaknesses_json, recent_success,
+                        recent_failure, notes_json, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        provider,
+                        self._json(profile["strengths"]),
+                        self._json(profile["weaknesses"]),
+                        int(profile["recent_success"]),
+                        int(profile["recent_failure"]),
+                        self._json(profile["notes"]),
+                        now,
+                        now,
+                    ),
+                )
+
+    def list_provider_profiles(self) -> list[dict[str, Any]]:
+        self.ensure_provider_profiles()
+        with self._connect() as conn:
+            rows = conn.execute("SELECT * FROM cli_provider_profiles ORDER BY provider ASC").fetchall()
+            return [self._provider_profile_row(row) for row in rows]
+
+    def get_provider_profile(self, provider: str) -> dict[str, Any] | None:
+        self.ensure_provider_profiles()
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM cli_provider_profiles WHERE provider=?", (provider,)).fetchone()
+            return self._provider_profile_row(row)
+
+    def set_provider_profile(
+        self,
+        provider: str,
+        *,
+        strengths: list[Any] | None = None,
+        weaknesses: list[Any] | None = None,
+        recent_success: int | None = None,
+        recent_failure: int | None = None,
+        notes: list[Any] | None = None,
+    ) -> dict[str, Any] | None:
+        profile = self.get_provider_profile(provider)
+        if not profile:
+            return None
+        next_strengths = self._unique_list(strengths if strengths is not None else profile.get("strengths", []))
+        next_weaknesses = self._unique_list(weaknesses if weaknesses is not None else profile.get("weaknesses", []))
+        next_notes = self._unique_list(notes if notes is not None else profile.get("notes", []))[-20:]
+        now = time.time()
+        with self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE cli_provider_profiles
+                SET strengths_json=?, weaknesses_json=?, recent_success=?,
+                    recent_failure=?, notes_json=?, updated_at=?
+                WHERE provider=?
+                """,
+                (
+                    self._json(next_strengths),
+                    self._json(next_weaknesses),
+                    int(recent_success if recent_success is not None else profile.get("recent_success", 0)),
+                    int(recent_failure if recent_failure is not None else profile.get("recent_failure", 0)),
+                    self._json(next_notes),
+                    now,
+                    provider,
+                ),
+            )
+        return self.get_provider_profile(provider)
+
+    def update_provider_profile(
+        self,
+        provider: str,
+        task_tags: list[Any] | None,
+        outcome: str,
+        note: str = "",
+    ) -> dict[str, Any] | None:
+        profile = self.get_provider_profile(provider)
+        if not profile:
+            return None
+        tags = self._unique_list(list(task_tags or []))
+        outcome_text = str(outcome or "").lower()
+        strengths = list(profile.get("strengths") or [])
+        weaknesses = list(profile.get("weaknesses") or [])
+        recent_success = int(profile.get("recent_success") or 0)
+        recent_failure = int(profile.get("recent_failure") or 0)
+        if outcome_text in {"success", "succeeded", "ok"}:
+            recent_success += 1
+            strengths = self._unique_list([*strengths, *tags])
+        elif outcome_text in {"failure", "failed", "interrupted", "blocked", "canceled"}:
+            recent_failure += 1
+            weaknesses = self._unique_list([*weaknesses, *tags])
+        notes = list(profile.get("notes") or [])
+        if str(note or "").strip():
+            notes.append(str(note).strip())
+        return self.set_provider_profile(
+            provider,
+            strengths=strengths,
+            weaknesses=weaknesses,
+            recent_success=recent_success,
+            recent_failure=recent_failure,
+            notes=notes,
+        )
 
     def list_tools(self) -> list[dict[str, Any]]:
         with self._connect() as conn:
@@ -484,4 +652,3 @@ class CliAgentStore:
             )
         if own_conn:
             conn.close()
-

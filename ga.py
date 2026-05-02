@@ -205,21 +205,115 @@ def cli_agent_list_tools():
     store = _cli_store()
     return {"items": [_cli_tool_payload(spec.id, store) for spec in list_tool_specs()]}
 
-def cli_agent_start(provider, prompt, target_workspace=None, write_intent=True, policy=None, env_profile_id=None):
+def _cli_allowed_lines(policy, write_intent):
+    policy = policy or {}
+    labels = [
+        ("allow_write", bool(policy.get("allow_write", write_intent)), "Write files inside workspace"),
+        ("allow_tests", bool(policy.get("allow_tests", True)), "Run tests/checks"),
+        ("allow_install", bool(policy.get("allow_install", False)), "Install dependencies"),
+        ("allow_network", bool(policy.get("allow_network", True)), "Use network when needed"),
+        ("allow_commit", bool(policy.get("allow_commit", False)), "Commit changes"),
+        ("allow_push", bool(policy.get("allow_push", False)), "Push changes"),
+    ]
+    return "\n".join(f"- {text}: {'yes' if allowed else 'no'}" for _, allowed, text in labels)
+
+def _build_cli_agent_task_package(goal, workspace, mode, provider_reason, policy, write_intent, acceptance, suggested_tests):
+    acceptance = acceptance or "Complete the mission and report any blockers."
+    suggested_tests = suggested_tests or "Run the smallest relevant verification you can safely run; report if not run."
+    provider_reason = provider_reason or "Selected by GenericAgent provider selector."
+    return f"""You are a coding sub-agent invoked by GenericAgent.
+
+Mission:
+{goal}
+
+Workspace:
+{workspace or os.environ.get("GA_CLI_DEFAULT_WORKSPACE", "")}
+
+Mode:
+{mode or "implement"}
+
+Provider rationale:
+{provider_reason}
+
+Allowed:
+{_cli_allowed_lines(policy, write_intent)}
+
+Forbidden:
+- Do not commit or push unless explicitly allowed.
+- Do not change files outside workspace.
+- Do not expose secrets.
+- Do not perform destructive operations unless explicitly requested by the user.
+
+Acceptance:
+{acceptance}
+
+Verification:
+{suggested_tests}
+
+Output:
+- Summary
+- Files changed
+- Tests run
+- Blockers
+- Follow-up questions
+"""
+
+def cli_agent_select_provider(goal, mode="implement", task_size="medium", domain="unknown", risk="medium", preferred_provider=None):
+    from server.app.cli_agents.orchestration import select_provider
+    return select_provider(
+        _cli_store(),
+        goal=goal,
+        mode=mode,
+        task_size=task_size,
+        domain=domain,
+        risk=risk,
+        preferred_provider=preferred_provider,
+    )
+
+def cli_agent_start(
+    provider=None,
+    prompt="",
+    target_workspace=None,
+    write_intent=True,
+    policy=None,
+    env_profile_id=None,
+    mode="implement",
+    acceptance="",
+    suggested_tests="",
+    provider_reason="",
+):
     from server.app.cli_agents.registry import get_tool_spec
-    get_tool_spec(provider)
     store = _cli_store()
+    selection = None
+    if not provider:
+        selection = cli_agent_select_provider(prompt, mode=mode)
+        provider = selection["provider"]
+    get_tool_spec(provider)
+    merged_policy = dict(policy or {})
+    orchestration = dict(merged_policy.get("_orchestration") or {})
+    if selection and not provider_reason:
+        provider_reason = selection.get("reason", "")
+    orchestration.update({
+        "mode": mode,
+        "provider_reason": provider_reason,
+        "acceptance": acceptance,
+        "suggested_tests": suggested_tests,
+        "provider_selection": selection or {},
+    })
+    merged_policy["_orchestration"] = orchestration
+    workspace = target_workspace or os.environ.get("GA_CLI_DEFAULT_WORKSPACE")
+    packaged_prompt = _build_cli_agent_task_package(prompt, workspace, mode, provider_reason, merged_policy, write_intent, acceptance, suggested_tests)
     run = store.create_run(
         provider=provider,
-        prompt=prompt,
+        prompt=packaged_prompt,
         target_workspace=target_workspace,
         write_intent=write_intent,
-        policy=policy or {},
+        policy=merged_policy,
         env_profile_id=env_profile_id,
         parent_task_id=os.environ.get("GA_CURRENT_TASK_ID") or None,
         parent_session_id=os.environ.get("GA_CURRENT_SESSION_ID") or None,
     )
-    return {"status": "queued", "run_id": run["id"], "run": run}
+    return {"status": "queued", "run_id": run["id"], "run": run, "provider_selection": selection}
 
 def cli_agent_status(run_id):
     run = _cli_store().get_run(run_id)
@@ -236,6 +330,18 @@ def cli_agent_read_result(run_id):
 def cli_agent_cancel(run_id):
     ok = _cli_store().request_cancel(run_id)
     return {"status": "success" if ok else "error", "run_id": run_id}
+
+def cli_agent_compare_results(run_ids):
+    from server.app.cli_agents.orchestration import compare_results
+    return compare_results(_cli_store(), list(run_ids or []))
+
+def cli_agent_update_provider_profile(provider, task_tags, outcome, note=""):
+    from server.app.cli_agents.registry import get_tool_spec
+    get_tool_spec(provider)
+    profile = _cli_store().update_provider_profile(provider, list(task_tags or []), outcome, note=note)
+    if not profile:
+        return {"status": "error", "msg": "provider profile not found"}
+    return {"status": "success", "profile": profile}
 
 def expand_file_refs(text, base_dir=None):
     """展开文本中的 {{file:路径:起始行:结束行}} 引用为实际文件内容。
@@ -489,15 +595,31 @@ class GenericAgentHandler(BaseHandler):
         return StepOutcome(result, next_prompt=self._get_anchor_prompt(skip=args.get('_index', 0) > 0))
 
     def do_cli_agent_start(self, args, response):
-        provider = args.get("provider", "codex")
+        provider = args.get("provider")
         prompt = args.get("prompt", "")
         target_workspace = args.get("target_workspace")
         write_intent = args.get("write_intent", True)
         policy = args.get("policy") or {}
         env_profile_id = args.get("env_profile_id")
-        yield f"[Action] Starting CLI sub-agent: {provider}\n"
-        result = cli_agent_start(provider, prompt, target_workspace, write_intent, policy, env_profile_id)
+        mode = args.get("mode", "implement")
+        acceptance = args.get("acceptance", "")
+        suggested_tests = args.get("suggested_tests", "")
+        provider_reason = args.get("provider_reason", "")
+        yield f"[Action] Starting CLI sub-agent: {provider or 'auto'}\n"
+        result = cli_agent_start(provider, prompt, target_workspace, write_intent, policy, env_profile_id, mode, acceptance, suggested_tests, provider_reason)
         yield f"[Status] queued run {result.get('run_id')}\n"
+        return StepOutcome(result, next_prompt=self._get_anchor_prompt(skip=args.get('_index', 0) > 0))
+
+    def do_cli_agent_select_provider(self, args, response):
+        result = cli_agent_select_provider(
+            args.get("goal", ""),
+            mode=args.get("mode", "implement"),
+            task_size=args.get("task_size", "medium"),
+            domain=args.get("domain", "unknown"),
+            risk=args.get("risk", "medium"),
+            preferred_provider=args.get("preferred_provider"),
+        )
+        yield f"[Info] Selected provider {result.get('provider')} ({result.get('confidence')})\n"
         return StepOutcome(result, next_prompt=self._get_anchor_prompt(skip=args.get('_index', 0) > 0))
 
     def do_cli_agent_status(self, args, response):
@@ -524,6 +646,22 @@ class GenericAgentHandler(BaseHandler):
         run_id = args.get("run_id", "")
         result = cli_agent_cancel(run_id)
         yield f"[Status] cancel requested for CLI run {run_id}\n"
+        return StepOutcome(result, next_prompt=self._get_anchor_prompt(skip=args.get('_index', 0) > 0))
+
+    def do_cli_agent_compare_results(self, args, response):
+        run_ids = args.get("run_ids", [])
+        result = cli_agent_compare_results(run_ids)
+        yield f"[Info] Compared {len(result.get('items', []))} CLI run(s)\n"
+        return StepOutcome(result, next_prompt=self._get_anchor_prompt(skip=args.get('_index', 0) > 0))
+
+    def do_cli_agent_update_provider_profile(self, args, response):
+        result = cli_agent_update_provider_profile(
+            args.get("provider", ""),
+            args.get("task_tags", []),
+            args.get("outcome", ""),
+            note=args.get("note", ""),
+        )
+        yield f"[Info] Provider profile update: {result.get('status')}\n"
         return StepOutcome(result, next_prompt=self._get_anchor_prompt(skip=args.get('_index', 0) > 0))
     
     def _in_plan_mode(self): return self.working.get('in_plan_mode')

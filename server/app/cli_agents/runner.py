@@ -103,6 +103,7 @@ class CliRunner:
             }
             result_path.write_text(self.store._json(result), encoding="utf-8")
             self.store.finish_run(run_id, status, result=result, error=error)
+            self._record_provider_feedback(run, status, result, error)
         except Exception as exc:
             error = str(exc)
             result = {
@@ -119,6 +120,7 @@ class CliRunner:
             except Exception:
                 pass
             self.store.finish_run(run_id, "failed", result=result, error=error)
+            self._record_provider_feedback(run, "failed", result, error)
         finally:
             self.workspace.release(run_id)
 
@@ -310,3 +312,20 @@ class CliRunner:
     @staticmethod
     def _write_run_metadata(path: Path, run: dict[str, Any]) -> None:
         path.write_text(json.dumps(run, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+
+    def _record_provider_feedback(self, run: dict[str, Any], status: str, result: dict[str, Any], error: str) -> None:
+        provider = run.get("provider")
+        if not provider:
+            return
+        policy = run.get("policy") or {}
+        orchestration = policy.get("_orchestration") or {}
+        tags = [orchestration.get("mode") or "run"]
+        if policy.get("write_intent"):
+            tags.append("write")
+        blockers = result.get("blockers") or []
+        outcome = "success" if status == "succeeded" and not blockers else "failure"
+        note = error or (str(blockers[0]) if blockers else "")
+        try:
+            self.store.update_provider_profile(provider, tags, outcome, note=note)
+        except Exception:
+            pass

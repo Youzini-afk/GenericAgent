@@ -58,14 +58,29 @@
   }},
   {"type": "function", "function": {
     "name": "cli_agent_start",
-    "description": "Start a programming CLI sub-agent run. Use for coding subtasks; returns a run_id. Long runs should be checked with cli_agent_status/read_result instead of blocking forever",
+    "description": "Start a programming CLI sub-agent run. GenericAgent is the orchestrator and the CLI sub-agent is the executor. Provider may be omitted so the selector can choose. Returns a run_id; long runs should be checked with cli_agent_status/read_result instead of blocking forever",
     "parameters": {"type": "object", "properties": {
-      "provider": {"type": "string", "enum": ["claude_code", "codex", "opencode", "custom_shell"], "description": "CLI provider"},
-      "prompt": {"type": "string", "description": "Self-contained task prompt for the sub-agent"},
+      "provider": {"type": "string", "enum": ["claude_code", "codex", "opencode", "custom_shell"], "description": "Optional CLI provider. Omit for automatic selection"},
+      "prompt": {"type": "string", "description": "Self-contained task goal for the sub-agent"},
       "target_workspace": {"type": "string", "description": "Workspace path. Defaults to GA_CLI_DEFAULT_WORKSPACE"},
       "write_intent": {"type": "boolean", "description": "Whether this run may modify files", "default": true},
       "policy": {"type": "object", "description": "Execution policy: allow_write/tests/install/network/commit/push and optional custom_shell command_argv"},
-      "env_profile_id": {"type": "string", "description": "Optional CLI env profile id"}}}
+      "env_profile_id": {"type": "string", "description": "Optional CLI env profile id"},
+      "mode": {"type": "string", "enum": ["analyze", "implement", "review", "verify"], "description": "Subtask mode", "default": "implement"},
+      "acceptance": {"type": "string", "description": "Acceptance criteria for the sub-agent"},
+      "suggested_tests": {"type": "string", "description": "Suggested verification commands or checks"},
+      "provider_reason": {"type": "string", "description": "Why this provider was selected"}}}
+  }},
+  {"type": "function", "function": {
+    "name": "cli_agent_select_provider",
+    "description": "Select a CLI sub-agent provider using default preferences, live task judgement, install status, and provider profile feedback. Use before dispatch when provider choice is unclear",
+    "parameters": {"type": "object", "properties": {
+      "goal": {"type": "string", "description": "Task goal"},
+      "mode": {"type": "string", "enum": ["analyze", "implement", "review", "verify"], "description": "Task mode", "default": "implement"},
+      "task_size": {"type": "string", "enum": ["small", "medium", "large"], "description": "Estimated size", "default": "medium"},
+      "domain": {"type": "string", "enum": ["frontend", "backend", "infra", "docs", "tests", "unknown"], "description": "Task domain", "default": "unknown"},
+      "risk": {"type": "string", "enum": ["low", "medium", "high"], "description": "Risk level", "default": "medium"},
+      "preferred_provider": {"type": "string", "enum": ["claude_code", "codex", "opencode", "custom_shell"], "description": "Optional explicit provider from user"}}}
   }},
   {"type": "function", "function": {
     "name": "cli_agent_status",
@@ -92,6 +107,21 @@
     "description": "Cancel a pending or running CLI sub-agent run",
     "parameters": {"type": "object", "properties": {
       "run_id": {"type": "string", "description": "CLI run id"}}}
+  }},
+  {"type": "function", "function": {
+    "name": "cli_agent_compare_results",
+    "description": "Compare multiple CLI sub-agent run results and summarize statuses, changed files, diffs, blockers, and stderr tails",
+    "parameters": {"type": "object", "properties": {
+      "run_ids": {"type": "array", "items": {"type": "string"}, "description": "CLI run ids to compare"}}}
+  }},
+  {"type": "function", "function": {
+    "name": "cli_agent_update_provider_profile",
+    "description": "Record provider feedback after the user corrects provider choice or after a run outcome is known. This evolves future provider recommendations without overriding explicit user choices",
+    "parameters": {"type": "object", "properties": {
+      "provider": {"type": "string", "enum": ["claude_code", "codex", "opencode", "custom_shell"], "description": "Provider id"},
+      "task_tags": {"type": "array", "items": {"type": "string"}, "description": "Task tags such as frontend, large_refactor, ordinary_implementation"},
+      "outcome": {"type": "string", "enum": ["success", "failure", "interrupted", "blocked"], "description": "Observed outcome"},
+      "note": {"type": "string", "description": "Short reason or user correction"}}}
   }},
   {"type": "function", "function": {
     "name": "update_working_checkpoint",

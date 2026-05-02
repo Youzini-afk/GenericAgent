@@ -115,6 +115,69 @@ class CliAgentStoreTests(CliAgentTestCase):
         with self.assertRaises(ValueError):
             manager.prepare(run)
 
+    def test_provider_profiles_have_defaults_and_record_feedback(self):
+        store = self.store()
+
+        profiles = {item["provider"]: item for item in store.list_provider_profiles()}
+        self.assertIn("large_refactor", profiles["codex"]["strengths"])
+        self.assertIn("frontend", profiles["claude_code"]["strengths"])
+        self.assertIn("ordinary_implementation", profiles["opencode"]["strengths"])
+
+        updated = store.update_provider_profile(
+            "opencode",
+            task_tags=["ordinary_implementation", "backend"],
+            outcome="failure",
+            note="missed a simple migration",
+        )
+
+        self.assertEqual(updated["recent_failure"], 1)
+        self.assertIn("missed a simple migration", updated["notes"])
+
+
+class ProviderSelectorTests(CliAgentTestCase):
+    def test_selector_uses_default_preferences_with_explanations(self):
+        from server.app.cli_agents.orchestration import select_provider
+
+        store = self.store()
+        large = select_provider(store, goal="Refactor the backend queue across modules", mode="implement", task_size="large", domain="backend", risk="high")
+        frontend = select_provider(store, goal="Polish the React interaction and visual hierarchy", mode="implement", task_size="medium", domain="frontend", risk="medium")
+        ordinary = select_provider(store, goal="Add one small API field", mode="implement", task_size="small", domain="backend", risk="low")
+
+        self.assertEqual(large["provider"], "codex")
+        self.assertEqual(frontend["provider"], "claude_code")
+        self.assertEqual(ordinary["provider"], "opencode")
+        self.assertGreater(large["confidence"], 0.5)
+        self.assertIn("fallback_provider", large)
+        self.assertTrue(large["needs_install"])
+
+    def test_selector_honors_explicit_preferred_provider(self):
+        from server.app.cli_agents.orchestration import select_provider
+
+        result = select_provider(
+            self.store(),
+            goal="Large refactor but user wants Claude",
+            mode="implement",
+            task_size="large",
+            domain="backend",
+            risk="high",
+            preferred_provider="claude_code",
+        )
+
+        self.assertEqual(result["provider"], "claude_code")
+        self.assertIn("explicit", result["reason"])
+
+    def test_selector_lowers_provider_after_recent_failures(self):
+        from server.app.cli_agents.orchestration import select_provider
+
+        store = self.store()
+        for idx in range(3):
+            store.update_provider_profile("opencode", ["ordinary_implementation"], "failure", note=f"failure {idx}")
+
+        result = select_provider(store, goal="Add one small API field", mode="implement", task_size="small", domain="backend", risk="low")
+
+        self.assertNotEqual(result["provider"], "opencode")
+        self.assertEqual(result["fallback_provider"], "opencode")
+
 
 class CliAgentRunnerTests(CliAgentTestCase):
     def test_runner_streams_output_captures_diff_and_result(self):
@@ -235,6 +298,39 @@ class CliAgentApiTests(CliAgentTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual([item["id"] for item in response.json()["items"]], [run["id"]])
 
+    def test_compare_and_provider_profile_api(self):
+        client, headers = self._client_and_headers()
+        store = self.store()
+        ok = store.create_run(provider="codex", prompt="ok", target_workspace=os.environ["GA_CLI_DEFAULT_WORKSPACE"], write_intent=True, policy={"_orchestration": {"mode": "implement"}})
+        bad = store.create_run(provider="opencode", prompt="bad", target_workspace=os.environ["GA_CLI_DEFAULT_WORKSPACE"], write_intent=True, policy={})
+        store.mark_run_running(ok["id"])
+        store.finish_run(ok["id"], "succeeded", result={"summary": "done", "changed_files": ["a.py"], "diff_path": "diff.patch", "blockers": [], "stderr_tail": ""})
+        store.mark_run_running(bad["id"])
+        store.finish_run(bad["id"], "failed", result={"summary": "blocked", "changed_files": [], "diff_path": "", "blockers": ["missing auth"], "stderr_tail": "missing auth"})
+
+        self.assertEqual(client.post("/api/cli-runs/compare", json={"run_ids": [ok["id"]]}).status_code, 401)
+        missing = client.post("/api/cli-runs/compare", headers=headers, json={"run_ids": [ok["id"], "missing"]})
+        self.assertEqual(missing.status_code, 404)
+
+        compared = client.post("/api/cli-runs/compare", headers=headers, json={"run_ids": [ok["id"], bad["id"]]})
+        self.assertEqual(compared.status_code, 200, compared.text)
+        body = compared.json()
+        self.assertEqual(body["items"][0]["summary"], "done")
+        self.assertEqual(body["items"][1]["blockers"], ["missing auth"])
+        self.assertIn("2 run", body["combined_summary"])
+
+        profiles = client.get("/api/cli-provider-profiles", headers=headers)
+        self.assertEqual(profiles.status_code, 200)
+        self.assertIn("codex", [item["provider"] for item in profiles.json()["items"]])
+
+        updated = client.put(
+            "/api/cli-provider-profiles/codex",
+            headers=headers,
+            json={"task_tags": ["large_refactor"], "outcome": "success", "note": "good on wide refactors"},
+        )
+        self.assertEqual(updated.status_code, 200, updated.text)
+        self.assertEqual(updated.json()["recent_success"], 1)
+
 
 class GenericAgentCliToolTests(CliAgentTestCase):
     def test_cli_agent_start_records_current_parent_task_and_session(self):
@@ -247,6 +343,41 @@ class GenericAgentCliToolTests(CliAgentTestCase):
         run = self.store().get_run(result["run_id"])
         self.assertEqual(run["parent_task_id"], "task-parent")
         self.assertEqual(run["parent_session_id"], "session-parent")
+
+    def test_cli_agent_start_can_select_provider_and_build_task_package(self):
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            import ga
+            result = ga.cli_agent_start(
+                None,
+                "Add a focused backend endpoint",
+                write_intent=True,
+                policy={"allow_tests": True},
+                mode="implement",
+                acceptance="Endpoint returns the new field.",
+                suggested_tests="Run backend unit tests.",
+                provider_reason="ordinary implementation task",
+            )
+
+        run = self.store().get_run(result["run_id"])
+        self.assertEqual(run["provider"], "opencode")
+        self.assertIn("Mission:", run["prompt"])
+        self.assertIn("Endpoint returns the new field.", run["prompt"])
+        self.assertEqual(run["policy"]["_orchestration"]["mode"], "implement")
+        self.assertIn("ordinary implementation task", run["policy"]["_orchestration"]["provider_reason"])
+
+    def test_cli_agent_compare_results_and_update_profile_tools(self):
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            import ga
+        store = self.store()
+        run = store.create_run(provider="codex", prompt="ok", target_workspace=os.environ["GA_CLI_DEFAULT_WORKSPACE"], write_intent=False, policy={})
+        store.mark_run_running(run["id"])
+        store.finish_run(run["id"], "succeeded", result={"summary": "done", "changed_files": ["x.py"], "diff_path": "diff.patch", "blockers": []})
+
+        compared = ga.cli_agent_compare_results([run["id"]])
+        updated = ga.cli_agent_update_provider_profile("codex", ["large_refactor"], "success", note="handled broad edits")
+
+        self.assertEqual(compared["items"][0]["changed_files"], ["x.py"])
+        self.assertEqual(updated["profile"]["recent_success"], 1)
 
 
 if __name__ == "__main__":

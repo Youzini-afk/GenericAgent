@@ -58,14 +58,29 @@
   }},
   {"type": "function", "function": {
     "name": "cli_agent_start",
-    "description": "启动一个编程 CLI 子 Agent 任务。适合把编码子任务交给子 Agent；返回 run_id。长任务应后续用 cli_agent_status/read_result 查询，不要无限等待",
+    "description": "启动一个编程 CLI 子 Agent 任务。GenericAgent 是总管，CLI 子 Agent 是执行者。provider 可以省略，由选择器自动判断。返回 run_id；长任务应后续用 cli_agent_status/read_result 查询，不要无限等待",
     "parameters": {"type": "object", "properties": {
-      "provider": {"type": "string", "enum": ["claude_code", "codex", "opencode", "custom_shell"], "description": "CLI provider"},
-      "prompt": {"type": "string", "description": "给子 Agent 的自包含任务说明"},
+      "provider": {"type": "string", "enum": ["claude_code", "codex", "opencode", "custom_shell"], "description": "可选 CLI provider。省略则自动选择"},
+      "prompt": {"type": "string", "description": "给子 Agent 的自包含任务目标"},
       "target_workspace": {"type": "string", "description": "目标工作区路径。默认 GA_CLI_DEFAULT_WORKSPACE"},
       "write_intent": {"type": "boolean", "description": "本次运行是否可能修改文件", "default": true},
       "policy": {"type": "object", "description": "执行策略：allow_write/tests/install/network/commit/push，以及 custom_shell 可选 command_argv"},
-      "env_profile_id": {"type": "string", "description": "可选 CLI env profile id"}}}
+      "env_profile_id": {"type": "string", "description": "可选 CLI env profile id"},
+      "mode": {"type": "string", "enum": ["analyze", "implement", "review", "verify"], "description": "子任务模式", "default": "implement"},
+      "acceptance": {"type": "string", "description": "对子 Agent 的验收标准"},
+      "suggested_tests": {"type": "string", "description": "建议执行的验证命令或检查"},
+      "provider_reason": {"type": "string", "description": "选择该 provider 的原因"}}}
+  }},
+  {"type": "function", "function": {
+    "name": "cli_agent_select_provider",
+    "description": "结合默认偏好、实时任务判断、安装状态与 provider profile 反馈来选择 CLI 子 Agent。provider 不明确时先调用它",
+    "parameters": {"type": "object", "properties": {
+      "goal": {"type": "string", "description": "任务目标"},
+      "mode": {"type": "string", "enum": ["analyze", "implement", "review", "verify"], "description": "任务模式", "default": "implement"},
+      "task_size": {"type": "string", "enum": ["small", "medium", "large"], "description": "任务规模", "default": "medium"},
+      "domain": {"type": "string", "enum": ["frontend", "backend", "infra", "docs", "tests", "unknown"], "description": "任务领域", "default": "unknown"},
+      "risk": {"type": "string", "enum": ["low", "medium", "high"], "description": "风险等级", "default": "medium"},
+      "preferred_provider": {"type": "string", "enum": ["claude_code", "codex", "opencode", "custom_shell"], "description": "用户显式指定的 provider，可选"}}}
   }},
   {"type": "function", "function": {
     "name": "cli_agent_status",
@@ -92,6 +107,21 @@
     "description": "取消 pending 或 running 中的 CLI 子 Agent run",
     "parameters": {"type": "object", "properties": {
       "run_id": {"type": "string", "description": "CLI run id"}}}
+  }},
+  {"type": "function", "function": {
+    "name": "cli_agent_compare_results",
+    "description": "对比多个 CLI 子 Agent 运行结果，汇总状态、变更文件、diff、阻碍与 stderr 尾部",
+    "parameters": {"type": "object", "properties": {
+      "run_ids": {"type": "array", "items": {"type": "string"}, "description": "要对比的 CLI run id 列表"}}}
+  }},
+  {"type": "function", "function": {
+    "name": "cli_agent_update_provider_profile",
+    "description": "在用户纠正 provider 选择或 run 结果明确后记录反馈，让未来推荐可进化，但不覆盖用户显式选择",
+    "parameters": {"type": "object", "properties": {
+      "provider": {"type": "string", "enum": ["claude_code", "codex", "opencode", "custom_shell"], "description": "Provider id"},
+      "task_tags": {"type": "array", "items": {"type": "string"}, "description": "任务标签，如 frontend、large_refactor、ordinary_implementation"},
+      "outcome": {"type": "string", "enum": ["success", "failure", "interrupted", "blocked"], "description": "观察到的结果"},
+      "note": {"type": "string", "description": "简短原因或用户纠正"}}}
   }},
   {"type": "function", "function": {
     "name": "update_working_checkpoint",

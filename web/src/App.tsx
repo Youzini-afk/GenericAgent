@@ -55,7 +55,7 @@ type Task = {
   cancel_requested?: boolean;
 };
 type WorkerInfo = { id: string; ready: boolean; current_task_id?: string; last_error?: string; alive: boolean };
-type StatusInfo = { data_dir: string; configured: boolean; worker_concurrency: number; cli_runner_concurrency?: number };
+type StatusInfo = { data_dir: string; configured: boolean; worker_concurrency: number; cli_runner_concurrency?: number; active_cli_runs?: number };
 type TaskEvent = { seq: number; type: string; payload: Record<string, unknown>; created_at: number };
 type LlmConfig = { configs: Array<{ var: string; kind: string; data: Record<string, unknown> }>; extras: Record<string, unknown>; path: string };
 type Schedule = {
@@ -84,6 +84,14 @@ type CliTool = {
   error: string;
 };
 type CliEnvProfile = { id: string; name: string; tool_id: string; env: Record<string, string>; created_at: number; updated_at: number };
+type CliProviderProfile = {
+  provider: string;
+  strengths: string[];
+  weaknesses: string[];
+  recent_success: number;
+  recent_failure: number;
+  notes: string[];
+};
 type CliRun = {
   id: string;
   parent_task_id?: string;
@@ -131,6 +139,8 @@ const I18N = {
     "common.none": "无",
     "common.idle": "空闲",
     "common.filesCount": "{count} 个文件",
+    "common.viewResult": "查看结果",
+    "common.summary": "摘要",
     "common.logout": "退出",
     "common.language": "语言",
     "role.user": "用户",
@@ -155,6 +165,8 @@ const I18N = {
     "chat.task": "任务",
     "chat.send": "发送",
     "chat.cancelTask": "取消任务 {id}",
+    "chat.childRuns": "子 Agent",
+    "chat.viewRun": "查看 run {id}",
     "workers.title": "工作进程",
     "workers.ready": "就绪",
     "workers.task": "任务",
@@ -183,6 +195,10 @@ const I18N = {
     "cliTools.installing": "正在安装 {id}",
     "cliTools.installed": "{id} 已安装",
     "cliTools.profileName": "配置名称",
+    "cliTools.providerProfiles": "Provider Profile",
+    "cliTools.strengths": "优势",
+    "cliTools.recent": "近期成败",
+    "cliTools.notes": "备注",
     "agentRuns.create": "创建运行",
     "agentRuns.noEnvProfile": "不使用环境变量配置",
     "agentRuns.selectRun": "选择一个 run",
@@ -190,6 +206,13 @@ const I18N = {
     "agentRuns.changed": "变更",
     "agentRuns.error": "错误",
     "agentRuns.cancel": "取消 run",
+    "agentRuns.parentSession": "父会话",
+    "agentRuns.parentTask": "父任务",
+    "agentRuns.providerReason": "Provider 理由",
+    "agentRuns.resultSummary": "结果摘要",
+    "agentRuns.blockers": "阻碍",
+    "agentRuns.tests": "测试",
+    "agentRuns.policy": "策略",
     "policy.write_intent": "写入意图",
     "policy.allow_write": "允许写入",
     "policy.allow_tests": "允许测试",
@@ -220,12 +243,14 @@ const I18N = {
     "logs.configured": "已配置",
     "logs.concurrency": "Agent 并发",
     "logs.cliRunners": "CLI 并发",
+    "logs.activeCliRuns": "活跃 CLI run",
     "logKind.server": "服务端",
     "logKind.worker": "工作进程",
     "logKind.scheduler": "调度器",
     "logKind.agent": "Agent",
     "logKind.browser": "浏览器",
-    "topbar.config": "配置"
+    "topbar.config": "配置",
+    "topbar.cliRuns": "CLI"
   },
   en: {
     "app.subtitle": "GenericAgent Web",
@@ -253,6 +278,8 @@ const I18N = {
     "common.none": "None",
     "common.idle": "Idle",
     "common.filesCount": "{count} files",
+    "common.viewResult": "View result",
+    "common.summary": "Summary",
     "common.logout": "Log out",
     "common.language": "Language",
     "role.user": "User",
@@ -277,6 +304,8 @@ const I18N = {
     "chat.task": "Task",
     "chat.send": "Send",
     "chat.cancelTask": "Cancel task {id}",
+    "chat.childRuns": "Sub-agents",
+    "chat.viewRun": "View run {id}",
     "workers.title": "Workers",
     "workers.ready": "Ready",
     "workers.task": "Task",
@@ -305,6 +334,10 @@ const I18N = {
     "cliTools.installing": "Installing {id}",
     "cliTools.installed": "{id} installed",
     "cliTools.profileName": "Profile name",
+    "cliTools.providerProfiles": "Provider Profiles",
+    "cliTools.strengths": "Strengths",
+    "cliTools.recent": "Recent",
+    "cliTools.notes": "Notes",
     "agentRuns.create": "Create Run",
     "agentRuns.noEnvProfile": "No env profile",
     "agentRuns.selectRun": "Select a run",
@@ -312,6 +345,13 @@ const I18N = {
     "agentRuns.changed": "Changed",
     "agentRuns.error": "Error",
     "agentRuns.cancel": "Cancel run",
+    "agentRuns.parentSession": "Parent session",
+    "agentRuns.parentTask": "Parent task",
+    "agentRuns.providerReason": "Provider rationale",
+    "agentRuns.resultSummary": "Result summary",
+    "agentRuns.blockers": "Blockers",
+    "agentRuns.tests": "Tests",
+    "agentRuns.policy": "Policy",
     "policy.write_intent": "Write intent",
     "policy.allow_write": "Allow write",
     "policy.allow_tests": "Allow tests",
@@ -342,12 +382,14 @@ const I18N = {
     "logs.configured": "Configured",
     "logs.concurrency": "Agent concurrency",
     "logs.cliRunners": "CLI runners",
+    "logs.activeCliRuns": "Active CLI runs",
     "logKind.server": "Server",
     "logKind.worker": "Worker",
     "logKind.scheduler": "Scheduler",
     "logKind.agent": "Agent",
     "logKind.browser": "Browser",
-    "topbar.config": "config"
+    "topbar.config": "config",
+    "topbar.cliRuns": "CLI"
   }
 } as const;
 
@@ -404,6 +446,22 @@ function asText(value: unknown) {
 function changedCount(result: Record<string, unknown>) {
   const files = result?.changed_files;
   return Array.isArray(files) ? files.length : 0;
+}
+
+function blockersCount(result: Record<string, unknown>) {
+  const blockers = result?.blockers;
+  return Array.isArray(blockers) ? blockers.length : 0;
+}
+
+function orchestrationMeta(run?: CliRun) {
+  const policy = (run?.policy || {}) as Record<string, unknown>;
+  const meta = (policy._orchestration || {}) as Record<string, unknown>;
+  return {
+    mode: typeof meta.mode === "string" ? meta.mode : "",
+    providerReason: typeof meta.provider_reason === "string" ? meta.provider_reason : "",
+    acceptance: typeof meta.acceptance === "string" ? meta.acceptance : "",
+    suggestedTests: typeof meta.suggested_tests === "string" ? meta.suggested_tests : ""
+  };
 }
 
 function getInitialLang(): Lang {
@@ -536,7 +594,7 @@ function Login({ onLogin, t }: { onLogin: (token: string) => void; t: T }) {
   );
 }
 
-function ChatPage({ token, t }: { token: string; t: T }) {
+function ChatPage({ token, t, onOpenRun }: { token: string; t: T; onOpenRun: (runId: string) => void }) {
   const sessions = useAsyncData<Session[]>(token, "/api/sessions", [], 3000);
   const tasks = useAsyncData<Task[]>(token, "/api/tasks", [], 2000);
   const [active, setActive] = useState<string>("");
@@ -678,12 +736,15 @@ function ChatPage({ token, t }: { token: string; t: T }) {
           <div className="child-run-strip">
             {childRuns.slice(0, 6).map((run) => (
               <article className="child-run-card" key={run.id}>
-                <div>
-                  <strong>{run.provider}</strong>
-                  <span>{shortId(run.id)} · {run.workspace_mode || "-"}</span>
+                <div className="child-run-main">
+                  <strong>{run.provider} · {orchestrationMeta(run).mode || "-"}</strong>
+                  <span>{shortId(run.id)} · {run.workspace_mode || "-"} · {t("common.filesCount", { count: changedCount(run.result) })}</span>
+                  {orchestrationMeta(run).providerReason && <small>{orchestrationMeta(run).providerReason}</small>}
                 </div>
                 <span className={cliStatusClass[run.status]}>{statusLabel(t, run.status)}</span>
-                <small>{changedCount(run.result) ? t("common.filesCount", { count: changedCount(run.result) }) : fmtTime(run.updated_at)}</small>
+                <button className="link-btn" type="button" title={t("chat.viewRun", { id: shortId(run.id) })} onClick={() => onOpenRun(run.id)}>
+                  {t("common.viewResult")} · {t("agentRuns.blockers")} {blockersCount(run.result)}
+                </button>
               </article>
             ))}
           </div>
@@ -835,6 +896,7 @@ function QueuePage({ token, t }: { token: string; t: T }) {
 function CliToolsPage({ token, t }: { token: string; t: T }) {
   const tools = useAsyncData<{ items: CliTool[] }>(token, "/api/cli-tools", { items: [] }, 4000);
   const profiles = useAsyncData<{ items: CliEnvProfile[] }>(token, "/api/cli-env-profiles", { items: [] }, 4000);
+  const providerProfiles = useAsyncData<{ items: CliProviderProfile[] }>(token, "/api/cli-provider-profiles", { items: [] }, 4000);
   const [versions, setVersions] = useState<Record<string, string>>({});
   const [profile, setProfile] = useState({ name: "", tool_id: "codex" });
   const [envText, setEnvText] = useState('{\n  "OPENAI_API_KEY": ""\n}');
@@ -884,6 +946,10 @@ function CliToolsPage({ token, t }: { token: string; t: T }) {
         <div className="tool-grid">
           {tools.data.items.map((tool) => (
             <article className="flat-card" key={tool.id}>
+              {(() => {
+                const providerProfile = providerProfiles.data.items.find((item) => item.provider === tool.id);
+                return (
+                  <>
               <div className="card-row">
                 <strong>{tool.name}</strong>
                 <span className={tool.status === "installed" ? "badge ok" : tool.status === "broken" ? "badge bad" : "badge neutral"}>{toolStatusLabel(t, tool.status)}</span>
@@ -897,6 +963,12 @@ function CliToolsPage({ token, t }: { token: string; t: T }) {
                 <dd>{tool.command_path || tool.command || "-"}</dd>
                 <dt>{t("cliTools.error")}</dt>
                 <dd>{tool.error || "-"}</dd>
+                <dt>{t("cliTools.strengths")}</dt>
+                <dd>{providerProfile?.strengths?.join(", ") || "-"}</dd>
+                <dt>{t("cliTools.recent")}</dt>
+                <dd>{providerProfile ? `${providerProfile.recent_success}/${providerProfile.recent_failure}` : "-"}</dd>
+                <dt>{t("cliTools.notes")}</dt>
+                <dd>{providerProfile?.notes?.slice(-2).join("; ") || "-"}</dd>
               </dl>
               <div className="pathbar compact">
                 <input
@@ -910,6 +982,9 @@ function CliToolsPage({ token, t }: { token: string; t: T }) {
                   <Play size={16} />
                 </IconButton>
               </div>
+                  </>
+                );
+              })()}
             </article>
           ))}
         </div>
@@ -944,11 +1019,23 @@ function CliToolsPage({ token, t }: { token: string; t: T }) {
   );
 }
 
-function AgentRunsPage({ token, t }: { token: string; t: T }) {
+function AgentRunsPage({
+  token,
+  t,
+  selectedRunId,
+  onSelectedRun
+}: {
+  token: string;
+  t: T;
+  selectedRunId?: string;
+  onSelectedRun?: (runId: string) => void;
+}) {
   const runs = useAsyncData<{ items: CliRun[] }>(token, "/api/cli-runs", { items: [] }, 2500);
   const profiles = useAsyncData<{ items: CliEnvProfile[] }>(token, "/api/cli-env-profiles", { items: [] }, 5000);
   const [form, setForm] = useState({
     provider: "codex",
+    mode: "implement",
+    provider_reason: "",
     prompt: "",
     target_workspace: "/data/workspace",
     write_intent: true,
@@ -960,11 +1047,21 @@ function AgentRunsPage({ token, t }: { token: string; t: T }) {
     allow_push: false,
     env_profile_id: ""
   });
-  const [selected, setSelected] = useState("");
+  const [selected, setSelectedState] = useState("");
   const [events, setEvents] = useState<CliRunEvent[]>([]);
   const [diff, setDiff] = useState("");
   const [result, setResult] = useState<Record<string, unknown>>({});
   const selectedRun = runs.data.items.find((item) => item.id === selected);
+  const selectedMeta = orchestrationMeta(selectedRun);
+
+  function setSelected(runId: string) {
+    setSelectedState(runId);
+    onSelectedRun?.(runId);
+  }
+
+  useEffect(() => {
+    if (selectedRunId && selectedRunId !== selected) setSelectedState(selectedRunId);
+  }, [selectedRunId, selected]);
 
   async function createRun(event: FormEvent) {
     event.preventDefault();
@@ -974,7 +1071,11 @@ function AgentRunsPage({ token, t }: { token: string; t: T }) {
       allow_install: form.allow_install,
       allow_network: form.allow_network,
       allow_commit: form.allow_commit,
-      allow_push: form.allow_push
+      allow_push: form.allow_push,
+      _orchestration: {
+        mode: form.mode,
+        provider_reason: form.provider_reason
+      }
     };
     const run = await api<CliRun>("/api/cli-runs", token, {
       method: "POST",
@@ -1026,6 +1127,12 @@ function AgentRunsPage({ token, t }: { token: string; t: T }) {
             <option value="opencode">OpenCode</option>
             <option value="custom_shell">Custom Shell</option>
           </select>
+          <select value={form.mode} onChange={(e) => setForm({ ...form, mode: e.target.value })}>
+            <option value="implement">implement</option>
+            <option value="analyze">analyze</option>
+            <option value="review">review</option>
+            <option value="verify">verify</option>
+          </select>
           <input value={form.target_workspace} onChange={(e) => setForm({ ...form, target_workspace: e.target.value })} />
           <select value={form.env_profile_id} onChange={(e) => setForm({ ...form, env_profile_id: e.target.value })}>
             <option value="">{t("agentRuns.noEnvProfile")}</option>
@@ -1033,6 +1140,7 @@ function AgentRunsPage({ token, t }: { token: string; t: T }) {
               <option value={item.id} key={item.id}>{item.name}</option>
             ))}
           </select>
+          <input value={form.provider_reason} onChange={(e) => setForm({ ...form, provider_reason: e.target.value })} placeholder={t("agentRuns.providerReason")} />
           <textarea value={form.prompt} onChange={(e) => setForm({ ...form, prompt: e.target.value })} />
           <div className="toggle-grid">
             {(["write_intent", "allow_write", "allow_tests", "allow_install", "allow_network", "allow_commit", "allow_push"] as const).map((key) => (
@@ -1065,7 +1173,7 @@ function AgentRunsPage({ token, t }: { token: string; t: T }) {
                   <td><button className="link-btn" type="button" onClick={() => setSelected(run.id)}>{shortId(run.id)}</button></td>
                   <td>{run.provider}</td>
                   <td><span className={cliStatusClass[run.status]}>{statusLabel(t, run.status)}</span></td>
-                  <td>{run.workspace_mode || "-"}</td>
+                  <td>{orchestrationMeta(run).mode || run.workspace_mode || "-"}</td>
                   <td>{fmtTime(run.updated_at)}</td>
                   <td>
                     {["pending", "preparing", "running"].includes(run.status) && (
@@ -1090,10 +1198,26 @@ function AgentRunsPage({ token, t }: { token: string; t: T }) {
             <dl className="kv">
               <dt>{t("agentRuns.workspace")}</dt>
               <dd>{selectedRun.effective_workspace || selectedRun.target_workspace}</dd>
+              <dt>{t("table.provider")}</dt>
+              <dd>{selectedRun.provider} · {selectedMeta.mode || "-"}</dd>
+              <dt>{t("agentRuns.parentSession")}</dt>
+              <dd>{selectedRun.parent_session_id || "-"}</dd>
+              <dt>{t("agentRuns.parentTask")}</dt>
+              <dd>{selectedRun.parent_task_id || "-"}</dd>
+              <dt>{t("agentRuns.providerReason")}</dt>
+              <dd>{selectedMeta.providerReason || "-"}</dd>
+              <dt>{t("agentRuns.resultSummary")}</dt>
+              <dd>{asText(result.summary) || "-"}</dd>
+              <dt>{t("agentRuns.blockers")}</dt>
+              <dd>{Array.isArray(result.blockers) && result.blockers.length ? result.blockers.join("; ") : "-"}</dd>
+              <dt>{t("agentRuns.tests")}</dt>
+              <dd>{asText(result.tests_run || selectedMeta.suggestedTests) || "-"}</dd>
               <dt>{t("agentRuns.changed")}</dt>
               <dd>{t("common.filesCount", { count: changedCount(result) })}</dd>
               <dt>{t("agentRuns.error")}</dt>
               <dd>{selectedRun.error || "-"}</dd>
+              <dt>{t("agentRuns.policy")}</dt>
+              <dd>{asText(selectedRun.policy)}</dd>
             </dl>
             <pre className="log-box">{events.map((event) => `[${event.type}] ${asText(event.payload.text || event.payload.status || event.payload.error)}\n`).join("")}</pre>
             <pre className="log-box">{asText(result)}</pre>
@@ -1427,6 +1551,8 @@ function LogsPage({ token, status, t }: { token: string; status?: StatusInfo; t:
           <dd>{status?.worker_concurrency ?? "-"}</dd>
           <dt>{t("logs.cliRunners")}</dt>
           <dd>{status?.cli_runner_concurrency ?? "-"}</dd>
+          <dt>{t("logs.activeCliRuns")}</dt>
+          <dd>{status?.active_cli_runs ?? "-"}</dd>
         </dl>
       </Section>
       <Section title={t("logs.logs")} icon={<FileText size={18} />} actions={<IconButton title={t("common.refresh")} onClick={load}><RefreshCw size={16} /></IconButton>}>
@@ -1459,6 +1585,7 @@ function AppShell({
   t: T;
 }) {
   const [page, setPage] = useState<PageKey>("chat");
+  const [selectedCliRun, setSelectedCliRun] = useState("");
   const status = useAsyncData<StatusInfo | undefined>(token, "/api/status", undefined, 5000);
   const workers = useAsyncData<WorkerInfo[]>(token, "/api/workers", [], 5000);
   const tasks = useAsyncData<Task[]>(token, "/api/tasks", [], 4000);
@@ -1470,11 +1597,11 @@ function AppShell({
   }
 
   const content = {
-    chat: <ChatPage token={token} t={t} />,
+    chat: <ChatPage token={token} t={t} onOpenRun={(runId) => { setSelectedCliRun(runId); setPage("agentRuns"); }} />,
     workers: <WorkersPage token={token} t={t} />,
     queue: <QueuePage token={token} t={t} />,
     cliTools: <CliToolsPage token={token} t={t} />,
-    agentRuns: <AgentRunsPage token={token} t={t} />,
+    agentRuns: <AgentRunsPage token={token} t={t} selectedRunId={selectedCliRun} onSelectedRun={setSelectedCliRun} />,
     config: <ConfigPage token={token} t={t} />,
     schedules: <SchedulesPage token={token} t={t} />,
     memory: <MemoryPage token={token} t={t} />,
@@ -1524,6 +1651,10 @@ function AppShell({
             <span className="metric">
               <Activity size={15} />
               {activeTasks.length}
+            </span>
+            <span className="metric">
+              <Code2 size={15} />
+              {t("topbar.cliRuns")} {status.data?.active_cli_runs ?? 0}
             </span>
             <span className={status.data?.configured ? "badge ok" : "badge warn"}>
               {status.data?.configured ? <Check size={13} /> : <X size={13} />}

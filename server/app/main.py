@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from runtime_paths import code_path, ensure_runtime_layout, mykey_path, runtime_path
 from server.app.browser.manager import BrowserRegistry
 from server.app.cli_agents.installer import ToolInstaller
+from server.app.cli_agents.orchestration import compare_results
 from server.app.cli_agents.pool import CliRunPool
 from server.app.cli_agents.registry import get_tool_spec, list_tool_specs
 from server.app.cli_agents.store import CliAgentStore
@@ -106,6 +107,21 @@ class CliRunCreatePayload(BaseModel):
     env_profile_id: str | None = None
     parent_task_id: str | None = None
     parent_session_id: str | None = None
+
+
+class CliRunComparePayload(BaseModel):
+    run_ids: list[str] = []
+
+
+class CliProviderProfilePayload(BaseModel):
+    strengths: list[str] | None = None
+    weaknesses: list[str] | None = None
+    recent_success: int | None = None
+    recent_failure: int | None = None
+    notes: list[str] | None = None
+    task_tags: list[str] | None = None
+    outcome: str | None = None
+    note: str = ""
 
 
 def _settings() -> dict[str, Any]:
@@ -238,11 +254,13 @@ def create_app() -> FastAPI:
 
     @app.get("/api/status")
     def status(_: None = Depends(require_auth)):
+        active_cli_runs = [run for run in settings["cli_store"].list_runs() if run["status"] in {"pending", "preparing", "running"}]
         return {
             "data_dir": settings["data_dir"],
             "configured": mykey_path().exists() or runtime_path("mykey.json").exists(),
             "worker_concurrency": int(os.environ.get("GA_WORKER_CONCURRENCY", "2") or 2),
             "cli_runner_concurrency": int(os.environ.get("GA_CLI_RUNNER_CONCURRENCY", "2") or 2),
+            "active_cli_runs": len(active_cli_runs),
         }
 
     @app.get("/api/workers")
@@ -314,6 +332,31 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=404, detail="env profile not found")
         return {"ok": True}
 
+    @app.get("/api/cli-provider-profiles")
+    def list_cli_provider_profiles(_: None = Depends(require_auth), cs: CliAgentStore = Depends(cli_store)):
+        return {"items": cs.list_provider_profiles()}
+
+    @app.put("/api/cli-provider-profiles/{provider}")
+    def update_cli_provider_profile(provider: str, req: CliProviderProfilePayload, _: None = Depends(require_auth), cs: CliAgentStore = Depends(cli_store)):
+        try:
+            get_tool_spec(provider)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="provider not found")
+        if req.outcome:
+            profile = cs.update_provider_profile(provider, req.task_tags or [], req.outcome, req.note)
+        else:
+            profile = cs.set_provider_profile(
+                provider,
+                strengths=req.strengths,
+                weaknesses=req.weaknesses,
+                recent_success=req.recent_success,
+                recent_failure=req.recent_failure,
+                notes=req.notes,
+            )
+        if not profile:
+            raise HTTPException(status_code=404, detail="provider profile not found")
+        return profile
+
     @app.get("/api/cli-runs")
     def list_cli_runs(_: None = Depends(require_auth), cs: CliAgentStore = Depends(cli_store)):
         return {"items": cs.list_runs()}
@@ -334,6 +377,13 @@ def create_app() -> FastAPI:
             parent_task_id=req.parent_task_id,
             parent_session_id=req.parent_session_id,
         )
+
+    @app.post("/api/cli-runs/compare")
+    def compare_cli_runs(req: CliRunComparePayload, _: None = Depends(require_auth), cs: CliAgentStore = Depends(cli_store)):
+        try:
+            return compare_results(cs, req.run_ids)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=f"run not found: {exc.args[0]}")
 
     @app.get("/api/cli-runs/{run_id}")
     def get_cli_run(run_id: str, _: None = Depends(require_auth), cs: CliAgentStore = Depends(cli_store)):

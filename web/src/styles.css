@@ -504,7 +504,7 @@ select:focus {
   border-radius: 8px;
 }
 
-.child-run-card div {
+.child-run-card .child-run-main {
   min-width: 0;
   display: grid;
   gap: 2px;
@@ -515,11 +515,18 @@ select:focus {
   font-size: 12px;
 }
 
-.child-run-card div span {
+.child-run-card .child-run-main span,
+.child-run-card .child-run-main small {
   overflow: hidden;
   color: #687385;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.child-run-card .link-btn {
+  grid-column: 1 / -1;
+  justify-self: start;
+  font-size: 12px;
 }
 
 .flat-card {
