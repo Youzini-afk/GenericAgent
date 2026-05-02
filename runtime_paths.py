@@ -34,7 +34,7 @@ def mykey_path() -> Path:
 
 
 def ensure_runtime_dirs() -> None:
-    for name in ("temp", "memory", "sche_tasks", "workspace", "workers", "browser"):
+    for name in ("temp", "memory", "sche_tasks", "workspace", "workers", "browser", "tools", "tool-auth", "agent-runs"):
         runtime_path(name).mkdir(parents=True, exist_ok=True)
 
 

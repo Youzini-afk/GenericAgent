@@ -463,6 +463,50 @@ select:focus {
   gap: 12px;
 }
 
+.tool-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.child-run-strip {
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px;
+  overflow-x: auto;
+  border-bottom: 1px solid #e2e7ef;
+  background: #fbfcfe;
+}
+
+.child-run-card {
+  min-width: 190px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 5px 8px;
+  padding: 8px;
+  background: #ffffff;
+  border: 1px solid #dce2eb;
+  border-radius: 8px;
+}
+
+.child-run-card div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.child-run-card span,
+.child-run-card small {
+  font-size: 12px;
+}
+
+.child-run-card div span {
+  overflow: hidden;
+  color: #687385;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .flat-card {
   padding: 12px;
 }
@@ -591,6 +635,39 @@ th {
   align-items: center;
   padding: 10px;
   margin-bottom: 12px;
+}
+
+.pathbar.compact {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  padding: 0;
+  margin: 10px 0 0;
+}
+
+.run-form textarea {
+  min-height: 120px;
+}
+
+.toggle-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+}
+
+.run-detail {
+  display: grid;
+  gap: 12px;
+}
+
+.link-btn {
+  padding: 0;
+  color: #245f9f;
+  background: transparent;
+  border: 0;
+  font-weight: 700;
+}
+
+.selected-row td {
+  background: #f2f6fc;
 }
 
 .log-box {

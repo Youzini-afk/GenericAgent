@@ -176,6 +176,67 @@ def web_execute_js(script, switch_tab_id=None, no_monitor=False):
         return result
     except Exception as e: return {"status": "error", "msg": format_error(e)}
 
+def _cli_store():
+    from server.app.cli_agents.store import CliAgentStore
+    return CliAgentStore(runtime_path("app.db"))
+
+def _cli_tool_payload(tool_id, store):
+    from server.app.cli_agents.registry import get_tool_spec
+    spec = get_tool_spec(tool_id)
+    row = store.get_tool(tool_id) or {}
+    data = {
+        "id": spec.id,
+        "name": spec.name,
+        "provider": spec.provider,
+        "install_kind": spec.install_kind,
+        "package": spec.package,
+        "command": spec.command,
+        "status": "missing",
+        "requested_version": "",
+        "resolved_version": "",
+        "command_path": "",
+        "error": "",
+    }
+    data.update(row)
+    return data
+
+def cli_agent_list_tools():
+    from server.app.cli_agents.registry import list_tool_specs
+    store = _cli_store()
+    return {"items": [_cli_tool_payload(spec.id, store) for spec in list_tool_specs()]}
+
+def cli_agent_start(provider, prompt, target_workspace=None, write_intent=True, policy=None, env_profile_id=None):
+    from server.app.cli_agents.registry import get_tool_spec
+    get_tool_spec(provider)
+    store = _cli_store()
+    run = store.create_run(
+        provider=provider,
+        prompt=prompt,
+        target_workspace=target_workspace,
+        write_intent=write_intent,
+        policy=policy or {},
+        env_profile_id=env_profile_id,
+        parent_task_id=os.environ.get("GA_CURRENT_TASK_ID") or None,
+        parent_session_id=os.environ.get("GA_CURRENT_SESSION_ID") or None,
+    )
+    return {"status": "queued", "run_id": run["id"], "run": run}
+
+def cli_agent_status(run_id):
+    run = _cli_store().get_run(run_id)
+    return run or {"status": "error", "msg": "run not found"}
+
+def cli_agent_read_events(run_id, after_seq=0, limit=100):
+    return {"events": _cli_store().events_after(run_id, after_seq=after_seq, limit=limit)}
+
+def cli_agent_read_result(run_id):
+    run = _cli_store().get_run(run_id)
+    if not run: return {"status": "error", "msg": "run not found"}
+    return {"status": run["status"], "result": run.get("result") or {}, "error": run.get("error", "")}
+
+def cli_agent_cancel(run_id):
+    ok = _cli_store().request_cancel(run_id)
+    return {"status": "success" if ok else "error", "run_id": run_id}
+
 def expand_file_refs(text, base_dir=None):
     """展开文本中的 {{file:路径:起始行:结束行}} 引用为实际文件内容。
     可与普通文本混排。展开失败抛 ValueError。
@@ -421,6 +482,49 @@ class GenericAgentHandler(BaseHandler):
         if 'memory' in path or 'sop' in path: 
             next_prompt += "\n[SYSTEM TIPS] 正在读取记忆或SOP文件，若决定按sop执行请提取sop中的关键点（特别是靠后的）update working memory."
         return StepOutcome(result, next_prompt=next_prompt)
+
+    def do_cli_agent_list_tools(self, args, response):
+        yield "[Action] Listing CLI sub-agent tools\n"
+        result = cli_agent_list_tools()
+        return StepOutcome(result, next_prompt=self._get_anchor_prompt(skip=args.get('_index', 0) > 0))
+
+    def do_cli_agent_start(self, args, response):
+        provider = args.get("provider", "codex")
+        prompt = args.get("prompt", "")
+        target_workspace = args.get("target_workspace")
+        write_intent = args.get("write_intent", True)
+        policy = args.get("policy") or {}
+        env_profile_id = args.get("env_profile_id")
+        yield f"[Action] Starting CLI sub-agent: {provider}\n"
+        result = cli_agent_start(provider, prompt, target_workspace, write_intent, policy, env_profile_id)
+        yield f"[Status] queued run {result.get('run_id')}\n"
+        return StepOutcome(result, next_prompt=self._get_anchor_prompt(skip=args.get('_index', 0) > 0))
+
+    def do_cli_agent_status(self, args, response):
+        run_id = args.get("run_id", "")
+        result = cli_agent_status(run_id)
+        yield f"[Info] CLI run {run_id}: {result.get('status')}\n"
+        return StepOutcome(result, next_prompt=self._get_anchor_prompt(skip=args.get('_index', 0) > 0))
+
+    def do_cli_agent_read_events(self, args, response):
+        run_id = args.get("run_id", "")
+        after_seq = args.get("after_seq", 0)
+        limit = args.get("limit", 100)
+        result = cli_agent_read_events(run_id, after_seq=after_seq, limit=limit)
+        yield f"[Info] Read {len(result.get('events', []))} CLI run events\n"
+        return StepOutcome(result, next_prompt=self._get_anchor_prompt(skip=args.get('_index', 0) > 0))
+
+    def do_cli_agent_read_result(self, args, response):
+        run_id = args.get("run_id", "")
+        result = cli_agent_read_result(run_id)
+        yield f"[Info] CLI run {run_id} result status: {result.get('status')}\n"
+        return StepOutcome(result, next_prompt=self._get_anchor_prompt(skip=args.get('_index', 0) > 0))
+
+    def do_cli_agent_cancel(self, args, response):
+        run_id = args.get("run_id", "")
+        result = cli_agent_cancel(run_id)
+        yield f"[Status] cancel requested for CLI run {run_id}\n"
+        return StepOutcome(result, next_prompt=self._get_anchor_prompt(skip=args.get('_index', 0) > 0))
     
     def _in_plan_mode(self): return self.working.get('in_plan_mode')
     def _exit_plan_mode(self): self.working.pop('in_plan_mode', None)

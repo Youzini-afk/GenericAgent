@@ -52,6 +52,48 @@
       "switch_tab_id": {"type": "string", "description": "可选的标签页 ID，切换到该标签页执行"}}}
   }},
   {"type": "function", "function": {
+    "name": "cli_agent_list_tools",
+    "description": "列出可用的编程 CLI 子 Agent，包括 Claude Code、Codex、OpenCode 与 custom shell，并返回安装/运行状态",
+    "parameters": {"type": "object", "properties": {}}
+  }},
+  {"type": "function", "function": {
+    "name": "cli_agent_start",
+    "description": "启动一个编程 CLI 子 Agent 任务。适合把编码子任务交给子 Agent；返回 run_id。长任务应后续用 cli_agent_status/read_result 查询，不要无限等待",
+    "parameters": {"type": "object", "properties": {
+      "provider": {"type": "string", "enum": ["claude_code", "codex", "opencode", "custom_shell"], "description": "CLI provider"},
+      "prompt": {"type": "string", "description": "给子 Agent 的自包含任务说明"},
+      "target_workspace": {"type": "string", "description": "目标工作区路径。默认 GA_CLI_DEFAULT_WORKSPACE"},
+      "write_intent": {"type": "boolean", "description": "本次运行是否可能修改文件", "default": true},
+      "policy": {"type": "object", "description": "执行策略：allow_write/tests/install/network/commit/push，以及 custom_shell 可选 command_argv"},
+      "env_profile_id": {"type": "string", "description": "可选 CLI env profile id"}}}
+  }},
+  {"type": "function", "function": {
+    "name": "cli_agent_status",
+    "description": "查询 CLI 子 Agent run 的状态与元信息",
+    "parameters": {"type": "object", "properties": {
+      "run_id": {"type": "string", "description": "CLI run id"}}}
+  }},
+  {"type": "function", "function": {
+    "name": "cli_agent_read_events",
+    "description": "读取 CLI 子 Agent run 的 stdout/stderr/status 事件",
+    "parameters": {"type": "object", "properties": {
+      "run_id": {"type": "string", "description": "CLI run id"},
+      "after_seq": {"type": "integer", "description": "只返回此序号之后的事件", "default": 0},
+      "limit": {"type": "integer", "description": "最大事件数量", "default": 100}}}
+  }},
+  {"type": "function", "function": {
+    "name": "cli_agent_read_result",
+    "description": "读取 CLI 子 Agent run 的结果，包括修改文件与 diff 路径",
+    "parameters": {"type": "object", "properties": {
+      "run_id": {"type": "string", "description": "CLI run id"}}}
+  }},
+  {"type": "function", "function": {
+    "name": "cli_agent_cancel",
+    "description": "取消 pending 或 running 中的 CLI 子 Agent run",
+    "parameters": {"type": "object", "properties": {
+      "run_id": {"type": "string", "description": "CLI run id"}}}
+  }},
+  {"type": "function", "function": {
     "name": "update_working_checkpoint",
     "description": "短期工作便签，每轮自动注入上下文，防长任务信息丢失。前中期调用，非结束时。何时调用：(1)任务开始读SOP后，存用户需求和关键约束/参数（简单1-2步任务除外）；(2)子任务切换或上下文即将被冲刷前；(3)多次重试失败后，重读SOP并必须调用存储新发现；(4)切换新任务时更新内容，清旧进度但保留仍有效的约束。\n\n何时不调用：简单任务（1-2步且无严重约束）、任务已完成时（应当用长期结算工具）",
     "parameters": {"type": "object", "properties": {

@@ -37,6 +37,8 @@ def _agent_run(worker_id: str, task: dict, stop: threading.Event) -> None:
     agent = GeneraticAgent()
     threading.Thread(target=agent.run, daemon=True).start()
     send_stdout("task_started", worker_id=worker_id, task_id=task_id)
+    os.environ["GA_CURRENT_TASK_ID"] = task_id
+    os.environ["GA_CURRENT_SESSION_ID"] = str(task.get("session_id") or "")
     dq = agent.put_task(prompt, source=task.get("kind", "chat"))
     try:
         while True:
@@ -61,6 +63,9 @@ def _agent_run(worker_id: str, task: dict, stop: threading.Event) -> None:
     except Exception as e:
         send_stdout("error", worker_id=worker_id, task_id=task_id, error=str(e))
         send_stdout("task_finished", worker_id=worker_id, task_id=task_id, status="failed", error=str(e))
+    finally:
+        os.environ.pop("GA_CURRENT_TASK_ID", None)
+        os.environ.pop("GA_CURRENT_SESSION_ID", None)
 
 
 def main(argv: list[str] | None = None) -> int:

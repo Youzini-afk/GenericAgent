@@ -15,6 +15,10 @@ from pydantic import BaseModel
 
 from runtime_paths import code_path, ensure_runtime_layout, mykey_path, runtime_path
 from server.app.browser.manager import BrowserRegistry
+from server.app.cli_agents.installer import ToolInstaller
+from server.app.cli_agents.pool import CliRunPool
+from server.app.cli_agents.registry import get_tool_spec, list_tool_specs
+from server.app.cli_agents.store import CliAgentStore
 from server.app.core.auth import AuthManager
 from server.app.queue.store import QueueStore
 from server.app.services.llm_config import load_llm_config, save_llm_config
@@ -83,19 +87,53 @@ class BrowserExecute(BaseModel):
     timeout: int = 15
 
 
+class CliToolInstallPayload(BaseModel):
+    version: str = "latest"
+
+
+class CliEnvProfilePayload(BaseModel):
+    name: str = ""
+    tool_id: str = "codex"
+    env: dict[str, Any] = {}
+
+
+class CliRunCreatePayload(BaseModel):
+    provider: str
+    prompt: str
+    target_workspace: str | None = None
+    write_intent: bool = True
+    policy: dict[str, Any] = {}
+    env_profile_id: str | None = None
+    parent_task_id: str | None = None
+    parent_session_id: str | None = None
+
+
 def _settings() -> dict[str, Any]:
     ensure_runtime_layout()
     data = runtime_path()
     auth = AuthManager(data, os.environ.get("GA_ADMIN_PASSWORD", ""))
     store = QueueStore(runtime_path("app.db"))
     store.recover_interrupted()
+    cli_store = CliAgentStore(runtime_path("app.db"))
+    cli_store.recover_interrupted()
     concurrency = int(os.environ.get("GA_WORKER_CONCURRENCY", "2") or 2)
     pool = WorkerPool(store, concurrency=concurrency, data_dir=str(data)) if concurrency > 0 else None
+    cli_concurrency = int(os.environ.get("GA_CLI_RUNNER_CONCURRENCY", "2") or 2)
+    cli_pool = CliRunPool(cli_store, concurrency=cli_concurrency) if cli_concurrency > 0 else None
     scheduler = None
     if os.environ.get("GA_SCHEDULER_ENABLED", "1") != "0":
         scheduler = SchedulerService(store, poll_interval=float(os.environ.get("GA_SCHEDULER_POLL_SECONDS", "30") or 30))
     browsers = BrowserRegistry(fake=os.environ.get("GA_BROWSER_FAKE") == "1")
-    return {"data_dir": str(data), "auth": auth, "store": store, "pool": pool, "scheduler": scheduler, "browsers": browsers}
+    return {
+        "data_dir": str(data),
+        "auth": auth,
+        "store": store,
+        "pool": pool,
+        "cli_store": cli_store,
+        "cli_pool": cli_pool,
+        "scheduler": scheduler,
+        "browsers": browsers,
+    }
 
 
 def _web_dist_dir() -> Path:
@@ -111,9 +149,12 @@ def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         pool = settings.get("pool")
+        cli_pool = settings.get("cli_pool")
         scheduler = settings.get("scheduler")
         if pool:
             pool.start()
+        if cli_pool:
+            cli_pool.start()
         if scheduler:
             scheduler.start()
         try:
@@ -121,6 +162,8 @@ def create_app() -> FastAPI:
         finally:
             if scheduler:
                 scheduler.stop()
+            if cli_pool:
+                cli_pool.stop()
             if pool:
                 pool.stop()
             settings["browsers"].close_all()
@@ -147,12 +190,36 @@ def create_app() -> FastAPI:
     def store() -> QueueStore:
         return settings["store"]
 
+    def cli_store() -> CliAgentStore:
+        return settings["cli_store"]
+
     def resource_error(exc: Exception) -> HTTPException:
         if isinstance(exc, ResourceError):
             return HTTPException(status_code=400, detail=str(exc))
         if isinstance(exc, FileNotFoundError):
             return HTTPException(status_code=404, detail="not found")
         return HTTPException(status_code=500, detail=str(exc))
+
+    def cli_tool_payload(tool_id: str, cs: CliAgentStore) -> dict[str, Any]:
+        spec = get_tool_spec(tool_id)
+        row = cs.get_tool(tool_id) or {}
+        payload = {
+            "id": spec.id,
+            "name": spec.name,
+            "provider": spec.provider,
+            "install_kind": spec.install_kind,
+            "package": spec.package,
+            "command": spec.command,
+            "args_template": list(spec.args_template),
+            "status": "missing",
+            "requested_version": "",
+            "resolved_version": "",
+            "install_path": "",
+            "command_path": "",
+            "error": "",
+        }
+        payload.update(row)
+        return payload
 
     @app.get("/api/health")
     def health():
@@ -175,6 +242,7 @@ def create_app() -> FastAPI:
             "data_dir": settings["data_dir"],
             "configured": mykey_path().exists() or runtime_path("mykey.json").exists(),
             "worker_concurrency": int(os.environ.get("GA_WORKER_CONCURRENCY", "2") or 2),
+            "cli_runner_concurrency": int(os.environ.get("GA_CLI_RUNNER_CONCURRENCY", "2") or 2),
         }
 
     @app.get("/api/workers")
@@ -188,6 +256,125 @@ def create_app() -> FastAPI:
         if not pool or not pool.restart_worker(worker_id):
             raise HTTPException(status_code=404, detail="worker not found")
         return {"ok": True}
+
+    @app.get("/api/cli-tools")
+    def list_cli_tools(_: None = Depends(require_auth), cs: CliAgentStore = Depends(cli_store)):
+        return {"items": [cli_tool_payload(spec.id, cs) for spec in list_tool_specs()]}
+
+    @app.get("/api/cli-tools/{tool_id}")
+    def get_cli_tool(tool_id: str, _: None = Depends(require_auth), cs: CliAgentStore = Depends(cli_store)):
+        try:
+            return cli_tool_payload(tool_id, cs)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="tool not found")
+
+    @app.post("/api/cli-tools/{tool_id}/install")
+    def install_cli_tool(tool_id: str, req: CliToolInstallPayload, _: None = Depends(require_auth), cs: CliAgentStore = Depends(cli_store)):
+        try:
+            return ToolInstaller(cs).install(tool_id, version=req.version)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="tool not found")
+
+    @app.post("/api/cli-tools/{tool_id}/test")
+    def test_cli_tool(tool_id: str, _: None = Depends(require_auth), cs: CliAgentStore = Depends(cli_store)):
+        try:
+            get_tool_spec(tool_id)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="tool not found")
+        return ToolInstaller(cs).test(tool_id)
+
+    @app.delete("/api/cli-tools/{tool_id}")
+    def delete_cli_tool(tool_id: str, _: None = Depends(require_auth), cs: CliAgentStore = Depends(cli_store)):
+        if not cs.delete_tool(tool_id):
+            raise HTTPException(status_code=404, detail="tool not installed")
+        return {"ok": True}
+
+    @app.get("/api/cli-env-profiles")
+    def list_cli_env_profiles(_: None = Depends(require_auth), cs: CliAgentStore = Depends(cli_store)):
+        return {"items": cs.list_env_profiles(mask_secrets=True)}
+
+    @app.post("/api/cli-env-profiles")
+    def create_cli_env_profile(req: CliEnvProfilePayload, _: None = Depends(require_auth), cs: CliAgentStore = Depends(cli_store)):
+        try:
+            get_tool_spec(req.tool_id)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="tool not found")
+        return cs.create_env_profile(req.name, req.tool_id, req.env)
+
+    @app.put("/api/cli-env-profiles/{profile_id}")
+    def update_cli_env_profile(profile_id: str, req: CliEnvProfilePayload, _: None = Depends(require_auth), cs: CliAgentStore = Depends(cli_store)):
+        profile = cs.update_env_profile(profile_id, req.name, req.tool_id, req.env)
+        if not profile:
+            raise HTTPException(status_code=404, detail="env profile not found")
+        return profile
+
+    @app.delete("/api/cli-env-profiles/{profile_id}")
+    def delete_cli_env_profile(profile_id: str, _: None = Depends(require_auth), cs: CliAgentStore = Depends(cli_store)):
+        if not cs.delete_env_profile(profile_id):
+            raise HTTPException(status_code=404, detail="env profile not found")
+        return {"ok": True}
+
+    @app.get("/api/cli-runs")
+    def list_cli_runs(_: None = Depends(require_auth), cs: CliAgentStore = Depends(cli_store)):
+        return {"items": cs.list_runs()}
+
+    @app.post("/api/cli-runs")
+    def create_cli_run(req: CliRunCreatePayload, _: None = Depends(require_auth), cs: CliAgentStore = Depends(cli_store)):
+        try:
+            get_tool_spec(req.provider)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="tool not found")
+        return cs.create_run(
+            provider=req.provider,
+            prompt=req.prompt,
+            target_workspace=req.target_workspace,
+            write_intent=req.write_intent,
+            policy=req.policy,
+            env_profile_id=req.env_profile_id,
+            parent_task_id=req.parent_task_id,
+            parent_session_id=req.parent_session_id,
+        )
+
+    @app.get("/api/cli-runs/{run_id}")
+    def get_cli_run(run_id: str, _: None = Depends(require_auth), cs: CliAgentStore = Depends(cli_store)):
+        run = cs.get_run(run_id)
+        if not run:
+            raise HTTPException(status_code=404, detail="run not found")
+        return run
+
+    @app.post("/api/cli-runs/{run_id}/cancel")
+    def cancel_cli_run(run_id: str, _: None = Depends(require_auth), cs: CliAgentStore = Depends(cli_store)):
+        pool = settings.get("cli_pool")
+        ok = pool.cancel_run(run_id) if pool else cs.request_cancel(run_id)
+        if not ok:
+            raise HTTPException(status_code=404, detail="run not found")
+        return {"ok": True}
+
+    @app.get("/api/cli-runs/{run_id}/events")
+    def get_cli_run_events(run_id: str, after_seq: int = 0, limit: int = 200, _: None = Depends(require_auth), cs: CliAgentStore = Depends(cli_store)):
+        if not cs.get_run(run_id):
+            raise HTTPException(status_code=404, detail="run not found")
+        return {"events": cs.events_after(run_id, after_seq, limit=limit)}
+
+    @app.get("/api/cli-runs/{run_id}/diff")
+    def get_cli_run_diff(run_id: str, _: None = Depends(require_auth), cs: CliAgentStore = Depends(cli_store)):
+        run = cs.get_run(run_id)
+        if not run:
+            raise HTTPException(status_code=404, detail="run not found")
+        diff_path = (run.get("result") or {}).get("diff_path") or runtime_path("agent-runs", run_id, "diff.patch")
+        path = Path(diff_path)
+        return {"run_id": run_id, "content": path.read_text(encoding="utf-8", errors="replace") if path.exists() else ""}
+
+    @app.get("/api/cli-runs/{run_id}/result")
+    def get_cli_run_result(run_id: str, _: None = Depends(require_auth), cs: CliAgentStore = Depends(cli_store)):
+        run = cs.get_run(run_id)
+        if not run:
+            raise HTTPException(status_code=404, detail="run not found")
+        return run.get("result") or {}
+
+    @app.get("/api/sessions/{session_id}/cli-runs")
+    def session_cli_runs(session_id: str, _: None = Depends(require_auth), cs: CliAgentStore = Depends(cli_store)):
+        return {"items": cs.list_runs_for_session(session_id)}
 
     @app.get("/api/config/llm")
     def get_llm_config(_: None = Depends(require_auth)):
@@ -402,6 +589,26 @@ def create_app() -> FastAPI:
         try:
             while True:
                 events = settings["store"].events_after(task_id, last_seq)
+                for event in events:
+                    last_seq = max(last_seq, int(event["seq"]))
+                    await websocket.send_json(event)
+                try:
+                    await asyncio.wait_for(websocket.receive_text(), timeout=0.5)
+                except asyncio.TimeoutError:
+                    pass
+        except WebSocketDisconnect:
+            return
+
+    @app.websocket("/ws/cli-runs/{run_id}")
+    async def cli_run_ws(websocket: WebSocket, run_id: str, token: str = "", after_seq: int = 0):
+        if not settings["auth"].verify_token(token):
+            await websocket.close(code=4401)
+            return
+        await websocket.accept()
+        last_seq = int(after_seq or 0)
+        try:
+            while True:
+                events = settings["cli_store"].events_after(run_id, last_seq)
                 for event in events:
                     last_seq = max(last_seq, int(event["seq"]))
                     await websocket.send_json(event)

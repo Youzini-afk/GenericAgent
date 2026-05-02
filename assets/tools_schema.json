@@ -52,6 +52,48 @@
       "switch_tab_id": {"type": "string", "description": "[Optional] Tab ID to switch to before executing"}}}
   }},
   {"type": "function", "function": {
+    "name": "cli_agent_list_tools",
+    "description": "List available programming CLI sub-agents such as Claude Code, Codex, OpenCode, and custom shell, including install/runtime status",
+    "parameters": {"type": "object", "properties": {}}
+  }},
+  {"type": "function", "function": {
+    "name": "cli_agent_start",
+    "description": "Start a programming CLI sub-agent run. Use for coding subtasks; returns a run_id. Long runs should be checked with cli_agent_status/read_result instead of blocking forever",
+    "parameters": {"type": "object", "properties": {
+      "provider": {"type": "string", "enum": ["claude_code", "codex", "opencode", "custom_shell"], "description": "CLI provider"},
+      "prompt": {"type": "string", "description": "Self-contained task prompt for the sub-agent"},
+      "target_workspace": {"type": "string", "description": "Workspace path. Defaults to GA_CLI_DEFAULT_WORKSPACE"},
+      "write_intent": {"type": "boolean", "description": "Whether this run may modify files", "default": true},
+      "policy": {"type": "object", "description": "Execution policy: allow_write/tests/install/network/commit/push and optional custom_shell command_argv"},
+      "env_profile_id": {"type": "string", "description": "Optional CLI env profile id"}}}
+  }},
+  {"type": "function", "function": {
+    "name": "cli_agent_status",
+    "description": "Get status and metadata for a CLI sub-agent run",
+    "parameters": {"type": "object", "properties": {
+      "run_id": {"type": "string", "description": "CLI run id"}}}
+  }},
+  {"type": "function", "function": {
+    "name": "cli_agent_read_events",
+    "description": "Read stdout/stderr/status events for a CLI sub-agent run",
+    "parameters": {"type": "object", "properties": {
+      "run_id": {"type": "string", "description": "CLI run id"},
+      "after_seq": {"type": "integer", "description": "Only return events after this sequence", "default": 0},
+      "limit": {"type": "integer", "description": "Max events", "default": 100}}}
+  }},
+  {"type": "function", "function": {
+    "name": "cli_agent_read_result",
+    "description": "Read final/substantial result for a CLI sub-agent run, including changed files and diff path",
+    "parameters": {"type": "object", "properties": {
+      "run_id": {"type": "string", "description": "CLI run id"}}}
+  }},
+  {"type": "function", "function": {
+    "name": "cli_agent_cancel",
+    "description": "Cancel a pending or running CLI sub-agent run",
+    "parameters": {"type": "object", "properties": {
+      "run_id": {"type": "string", "description": "CLI run id"}}}
+  }},
+  {"type": "function", "function": {
     "name": "update_working_checkpoint",
     "description": "Short-term working notepad, auto-injected each turn to prevent info loss in long tasks. Call during early/mid stages, not at end. When: (1) after reading SOP, store user needs & key constraints (skip for simple 1-2 step tasks); (2) before subtask switch or context flush; (3) after repeated failures, re-read SOP and must store new findings; (4) on new task, update content, clear old progress but keep valid constraints.\n\nDon't call: simple tasks (1-2 steps), task completed (use long-term memory tool)",
     "parameters": {"type": "object", "properties": {

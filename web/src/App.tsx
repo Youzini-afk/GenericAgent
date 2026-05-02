@@ -31,8 +31,9 @@ import {
 import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, api, login } from "./api";
 
-type PageKey = "chat" | "workers" | "queue" | "config" | "schedules" | "memory" | "files" | "browser" | "logs";
+type PageKey = "chat" | "workers" | "queue" | "cliTools" | "agentRuns" | "config" | "schedules" | "memory" | "files" | "browser" | "logs";
 type Status = "pending" | "leased" | "running" | "succeeded" | "failed" | "canceled" | "interrupted";
+type CliRunStatus = "pending" | "preparing" | "running" | "succeeded" | "failed" | "canceled" | "interrupted";
 
 type Session = { id: string; title: string; updated_at: number; created_at: number };
 type Message = { id: string; session_id: string; role: string; content: string; task_id?: string; created_at: number };
@@ -51,7 +52,7 @@ type Task = {
   cancel_requested?: boolean;
 };
 type WorkerInfo = { id: string; ready: boolean; current_task_id?: string; last_error?: string; alive: boolean };
-type StatusInfo = { data_dir: string; configured: boolean; worker_concurrency: number };
+type StatusInfo = { data_dir: string; configured: boolean; worker_concurrency: number; cli_runner_concurrency?: number };
 type TaskEvent = { seq: number; type: string; payload: Record<string, unknown>; created_at: number };
 type LlmConfig = { configs: Array<{ var: string; kind: string; data: Record<string, unknown> }>; extras: Record<string, unknown>; path: string };
 type Schedule = {
@@ -65,11 +66,47 @@ type Schedule = {
 };
 type FileItem = { name: string; path: string; is_dir: boolean; size: number; updated_at: number };
 type BrowserTab = { id: string; url: string; title: string; type: string };
+type CliTool = {
+  id: string;
+  name: string;
+  provider: string;
+  install_kind: string;
+  package: string;
+  command: string;
+  status: string;
+  requested_version: string;
+  resolved_version: string;
+  install_path: string;
+  command_path: string;
+  error: string;
+};
+type CliEnvProfile = { id: string; name: string; tool_id: string; env: Record<string, string>; created_at: number; updated_at: number };
+type CliRun = {
+  id: string;
+  parent_task_id?: string;
+  parent_session_id?: string;
+  provider: string;
+  target_workspace: string;
+  effective_workspace: string;
+  workspace_mode: string;
+  prompt: string;
+  status: CliRunStatus;
+  policy: Record<string, unknown>;
+  env_profile_id?: string;
+  result: Record<string, unknown>;
+  created_at: number;
+  updated_at: number;
+  error?: string;
+  cancel_requested?: boolean;
+};
+type CliRunEvent = { seq: number; type: string; payload: Record<string, unknown>; created_at: number };
 
 const navItems: Array<{ key: PageKey; label: string; icon: ReactNode }> = [
   { key: "chat", label: "Chat", icon: <MessageSquare size={17} /> },
   { key: "workers", label: "Workers", icon: <Boxes size={17} /> },
   { key: "queue", label: "Queue", icon: <ClipboardList size={17} /> },
+  { key: "cliTools", label: "CLI Tools", icon: <Code2 size={17} /> },
+  { key: "agentRuns", label: "Agent Runs", icon: <Activity size={17} /> },
   { key: "config", label: "API 配置", icon: <Settings2 size={17} /> },
   { key: "schedules", label: "Schedules", icon: <CalendarClock size={17} /> },
   { key: "memory", label: "Memory", icon: <Database size={17} /> },
@@ -81,6 +118,15 @@ const navItems: Array<{ key: PageKey; label: string; icon: ReactNode }> = [
 const statusClass: Record<Status, string> = {
   pending: "badge neutral",
   leased: "badge warn",
+  running: "badge live",
+  succeeded: "badge ok",
+  failed: "badge bad",
+  canceled: "badge muted",
+  interrupted: "badge warn"
+};
+const cliStatusClass: Record<CliRunStatus, string> = {
+  pending: "badge neutral",
+  preparing: "badge warn",
   running: "badge live",
   succeeded: "badge ok",
   failed: "badge bad",
@@ -101,6 +147,11 @@ function asText(value: unknown) {
   if (value == null) return "";
   if (typeof value === "string") return value;
   return JSON.stringify(value, null, 2);
+}
+
+function changedCount(result: Record<string, unknown>) {
+  const files = result?.changed_files;
+  return Array.isArray(files) ? files.length : 0;
 }
 
 function IconButton({
@@ -209,6 +260,7 @@ function ChatPage({ token }: { token: string }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
   const [events, setEvents] = useState<TaskEvent[]>([]);
+  const [childRuns, setChildRuns] = useState<CliRun[]>([]);
   const [watchTask, setWatchTask] = useState("");
   const [error, setError] = useState("");
 
@@ -224,6 +276,25 @@ function ChatPage({ token }: { token: string }) {
   useEffect(() => {
     loadMessages().catch((err) => setError(err.message));
   }, [loadMessages]);
+
+  useEffect(() => {
+    if (!active) return;
+    let canceled = false;
+    async function loadChildRuns() {
+      try {
+        const data = await api<{ items: CliRun[] }>(`/api/sessions/${active}/cli-runs`, token);
+        if (!canceled) setChildRuns(data.items);
+      } catch {
+        if (!canceled) setChildRuns([]);
+      }
+    }
+    loadChildRuns();
+    const timer = window.setInterval(loadChildRuns, 2500);
+    return () => {
+      canceled = true;
+      window.clearInterval(timer);
+    };
+  }, [active, token]);
 
   useEffect(() => {
     if (!watchTask) return;
@@ -320,6 +391,20 @@ function ChatPage({ token }: { token: string }) {
             ))}
           </div>
         </div>
+        {childRuns.length > 0 && (
+          <div className="child-run-strip">
+            {childRuns.slice(0, 6).map((run) => (
+              <article className="child-run-card" key={run.id}>
+                <div>
+                  <strong>{run.provider}</strong>
+                  <span>{shortId(run.id)} · {run.workspace_mode || "-"}</span>
+                </div>
+                <span className={cliStatusClass[run.status]}>{run.status}</span>
+                <small>{changedCount(run.result) ? `${changedCount(run.result)} files` : fmtTime(run.updated_at)}</small>
+              </article>
+            ))}
+          </div>
+        )}
         {error && <div className="inline-error">{error}</div>}
         <div className="messages">
           {messages.map((message) => (
@@ -461,6 +546,281 @@ function QueuePage({ token }: { token: string }) {
       </Section>
       <Section title="History" icon={<ListTree size={18} />}>{table(grouped.history)}</Section>
     </>
+  );
+}
+
+function CliToolsPage({ token }: { token: string }) {
+  const tools = useAsyncData<{ items: CliTool[] }>(token, "/api/cli-tools", { items: [] }, 4000);
+  const profiles = useAsyncData<{ items: CliEnvProfile[] }>(token, "/api/cli-env-profiles", { items: [] }, 4000);
+  const [versions, setVersions] = useState<Record<string, string>>({});
+  const [profile, setProfile] = useState({ name: "", tool_id: "codex" });
+  const [envText, setEnvText] = useState('{\n  "OPENAI_API_KEY": ""\n}');
+  const [notice, setNotice] = useState("");
+
+  async function install(toolId: string) {
+    setNotice(`installing ${toolId}`);
+    await api(`/api/cli-tools/${toolId}/install`, token, {
+      method: "POST",
+      body: JSON.stringify({ version: versions[toolId] || "latest" })
+    });
+    setNotice(`installed ${toolId}`);
+    await tools.refresh();
+  }
+
+  async function test(toolId: string) {
+    const result = await api<Record<string, unknown>>(`/api/cli-tools/${toolId}/test`, token, { method: "POST" });
+    setNotice(`${toolId}: ${asText(result.detected_version || result.stderr || result.stdout)}`);
+    await tools.refresh();
+  }
+
+  async function saveProfile(event: FormEvent) {
+    event.preventDefault();
+    const env = JSON.parse(envText || "{}");
+    await api("/api/cli-env-profiles", token, {
+      method: "POST",
+      body: JSON.stringify({ ...profile, env })
+    });
+    setProfile({ name: "", tool_id: "codex" });
+    await profiles.refresh();
+  }
+
+  return (
+    <div className="two-column wide-left">
+      <Section
+        title="CLI Tools"
+        icon={<Code2 size={18} />}
+        actions={
+          <>
+            {notice && <span className="badge neutral">{notice}</span>}
+            <IconButton title="刷新" onClick={tools.refresh}>
+              <RefreshCw size={16} />
+            </IconButton>
+          </>
+        }
+      >
+        <div className="tool-grid">
+          {tools.data.items.map((tool) => (
+            <article className="flat-card" key={tool.id}>
+              <div className="card-row">
+                <strong>{tool.name}</strong>
+                <span className={tool.status === "installed" ? "badge ok" : tool.status === "broken" ? "badge bad" : "badge neutral"}>{tool.status}</span>
+              </div>
+              <dl className="kv">
+                <dt>package</dt>
+                <dd>{tool.package || "-"}</dd>
+                <dt>version</dt>
+                <dd>{tool.resolved_version || tool.requested_version || "-"}</dd>
+                <dt>command</dt>
+                <dd>{tool.command_path || tool.command || "-"}</dd>
+                <dt>error</dt>
+                <dd>{tool.error || "-"}</dd>
+              </dl>
+              <div className="pathbar compact">
+                <input
+                  value={versions[tool.id] || "latest"}
+                  onChange={(e) => setVersions({ ...versions, [tool.id]: e.target.value })}
+                />
+                <IconButton title="安装" onClick={() => install(tool.id)} disabled={tool.install_kind === "custom"}>
+                  <HardDrive size={16} />
+                </IconButton>
+                <IconButton title="测试" onClick={() => test(tool.id)}>
+                  <Play size={16} />
+                </IconButton>
+              </div>
+            </article>
+          ))}
+        </div>
+      </Section>
+      <Section title="Env Profiles" icon={<KeyRound size={18} />} actions={<IconButton title="刷新" onClick={profiles.refresh}><RefreshCw size={16} /></IconButton>}>
+        <form className="inline-form" onSubmit={saveProfile}>
+          <input placeholder="profile name" value={profile.name} onChange={(e) => setProfile({ ...profile, name: e.target.value })} />
+          <select value={profile.tool_id} onChange={(e) => setProfile({ ...profile, tool_id: e.target.value })}>
+            {tools.data.items.map((tool) => (
+              <option value={tool.id} key={tool.id}>{tool.name}</option>
+            ))}
+          </select>
+          <textarea className="code-editor small" value={envText} onChange={(e) => setEnvText(e.target.value)} />
+          <button className="primary-btn" type="submit">
+            <Save size={16} />
+            保存
+          </button>
+        </form>
+        <div className="row-list">
+          {profiles.data.items.map((item) => (
+            <div className="row-item" key={item.id}>
+              <div>
+                <strong>{item.name}</strong>
+                <span>{item.tool_id} · {Object.keys(item.env || {}).join(", ") || "-"}</span>
+              </div>
+              <small>{fmtTime(item.updated_at)}</small>
+            </div>
+          ))}
+        </div>
+      </Section>
+    </div>
+  );
+}
+
+function AgentRunsPage({ token }: { token: string }) {
+  const runs = useAsyncData<{ items: CliRun[] }>(token, "/api/cli-runs", { items: [] }, 2500);
+  const profiles = useAsyncData<{ items: CliEnvProfile[] }>(token, "/api/cli-env-profiles", { items: [] }, 5000);
+  const [form, setForm] = useState({
+    provider: "codex",
+    prompt: "",
+    target_workspace: "/data/workspace",
+    write_intent: true,
+    allow_write: true,
+    allow_tests: true,
+    allow_install: false,
+    allow_network: true,
+    allow_commit: false,
+    allow_push: false,
+    env_profile_id: ""
+  });
+  const [selected, setSelected] = useState("");
+  const [events, setEvents] = useState<CliRunEvent[]>([]);
+  const [diff, setDiff] = useState("");
+  const [result, setResult] = useState<Record<string, unknown>>({});
+  const selectedRun = runs.data.items.find((item) => item.id === selected);
+
+  async function createRun(event: FormEvent) {
+    event.preventDefault();
+    const policy = {
+      allow_write: form.allow_write,
+      allow_tests: form.allow_tests,
+      allow_install: form.allow_install,
+      allow_network: form.allow_network,
+      allow_commit: form.allow_commit,
+      allow_push: form.allow_push
+    };
+    const run = await api<CliRun>("/api/cli-runs", token, {
+      method: "POST",
+      body: JSON.stringify({
+        provider: form.provider,
+        prompt: form.prompt,
+        target_workspace: form.target_workspace,
+        write_intent: form.write_intent,
+        policy,
+        env_profile_id: form.env_profile_id || null
+      })
+    });
+    setSelected(run.id);
+    setForm({ ...form, prompt: "" });
+    await runs.refresh();
+  }
+
+  const loadDetail = useCallback(async () => {
+    if (!selected) return;
+    const [eventData, diffData, resultData] = await Promise.all([
+      api<{ events: CliRunEvent[] }>(`/api/cli-runs/${selected}/events?limit=500`, token),
+      api<{ content: string }>(`/api/cli-runs/${selected}/diff`, token),
+      api<Record<string, unknown>>(`/api/cli-runs/${selected}/result`, token)
+    ]);
+    setEvents(eventData.events);
+    setDiff(diffData.content);
+    setResult(resultData);
+  }, [selected, token]);
+
+  useEffect(() => {
+    loadDetail().catch(() => undefined);
+    const timer = window.setInterval(() => loadDetail().catch(() => undefined), 2000);
+    return () => window.clearInterval(timer);
+  }, [loadDetail]);
+
+  async function cancel(runId: string) {
+    await api(`/api/cli-runs/${runId}/cancel`, token, { method: "POST" });
+    await runs.refresh();
+    await loadDetail();
+  }
+
+  return (
+    <div className="two-column wide-left">
+      <Section title="Create Run" icon={<Code2 size={18} />} actions={<IconButton title="刷新" onClick={runs.refresh}><RefreshCw size={16} /></IconButton>}>
+        <form className="inline-form run-form" onSubmit={createRun}>
+          <select value={form.provider} onChange={(e) => setForm({ ...form, provider: e.target.value })}>
+            <option value="codex">Codex</option>
+            <option value="claude_code">Claude Code</option>
+            <option value="opencode">OpenCode</option>
+            <option value="custom_shell">Custom Shell</option>
+          </select>
+          <input value={form.target_workspace} onChange={(e) => setForm({ ...form, target_workspace: e.target.value })} />
+          <select value={form.env_profile_id} onChange={(e) => setForm({ ...form, env_profile_id: e.target.value })}>
+            <option value="">no env profile</option>
+            {profiles.data.items.map((item) => (
+              <option value={item.id} key={item.id}>{item.name}</option>
+            ))}
+          </select>
+          <textarea value={form.prompt} onChange={(e) => setForm({ ...form, prompt: e.target.value })} />
+          <div className="toggle-grid">
+            {(["write_intent", "allow_write", "allow_tests", "allow_install", "allow_network", "allow_commit", "allow_push"] as const).map((key) => (
+              <label className="checkline" key={key}>
+                <input type="checkbox" checked={Boolean(form[key])} onChange={(e) => setForm({ ...form, [key]: e.target.checked })} />
+                {key}
+              </label>
+            ))}
+          </div>
+          <button className="primary-btn" type="submit" disabled={!form.prompt.trim()}>
+            <Play size={16} />
+            Run
+          </button>
+        </form>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Provider</th>
+                <th>Status</th>
+                <th>Mode</th>
+                <th>Updated</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {runs.data.items.map((run) => (
+                <tr key={run.id} className={selected === run.id ? "selected-row" : ""}>
+                  <td><button className="link-btn" type="button" onClick={() => setSelected(run.id)}>{shortId(run.id)}</button></td>
+                  <td>{run.provider}</td>
+                  <td><span className={cliStatusClass[run.status]}>{run.status}</span></td>
+                  <td>{run.workspace_mode || "-"}</td>
+                  <td>{fmtTime(run.updated_at)}</td>
+                  <td>
+                    {["pending", "preparing", "running"].includes(run.status) && (
+                      <IconButton title="取消 run" onClick={() => cancel(run.id)} danger>
+                        <CircleStop size={15} />
+                      </IconButton>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Section>
+      <Section
+        title={`Run ${shortId(selected)}`}
+        icon={<ClipboardList size={18} />}
+        actions={selectedRun && <span className={cliStatusClass[selectedRun.status]}>{selectedRun.status}</span>}
+      >
+        {selectedRun ? (
+          <div className="run-detail">
+            <dl className="kv">
+              <dt>workspace</dt>
+              <dd>{selectedRun.effective_workspace || selectedRun.target_workspace}</dd>
+              <dt>changed</dt>
+              <dd>{changedCount(result)} files</dd>
+              <dt>error</dt>
+              <dd>{selectedRun.error || "-"}</dd>
+            </dl>
+            <pre className="log-box">{events.map((event) => `[${event.type}] ${asText(event.payload.text || event.payload.status || event.payload.error)}\n`).join("")}</pre>
+            <pre className="log-box">{asText(result)}</pre>
+            <pre className="log-box tall">{diff}</pre>
+          </div>
+        ) : (
+          <div className="empty">Select a run</div>
+        )}
+      </Section>
+    </div>
   );
 }
 
@@ -782,6 +1142,8 @@ function LogsPage({ token, status }: { token: string; status?: StatusInfo }) {
           <dd>{String(status?.configured ?? false)}</dd>
           <dt>concurrency</dt>
           <dd>{status?.worker_concurrency ?? "-"}</dd>
+          <dt>cli runners</dt>
+          <dd>{status?.cli_runner_concurrency ?? "-"}</dd>
         </dl>
       </Section>
       <Section title="Logs" icon={<FileText size={18} />} actions={<IconButton title="刷新" onClick={load}><RefreshCw size={16} /></IconButton>}>
@@ -816,6 +1178,8 @@ function AppShell({ token, setToken }: { token: string; setToken: (token: string
     chat: <ChatPage token={token} />,
     workers: <WorkersPage token={token} />,
     queue: <QueuePage token={token} />,
+    cliTools: <CliToolsPage token={token} />,
+    agentRuns: <AgentRunsPage token={token} />,
     config: <ConfigPage token={token} />,
     schedules: <SchedulesPage token={token} />,
     memory: <MemoryPage token={token} />,
