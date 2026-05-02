@@ -1,4 +1,4 @@
-import { Plus, Settings2, Trash2, X, ChevronRight } from "lucide-react";
+import { Edit2, Plus, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import type { T } from "../lib/i18n";
@@ -8,137 +8,153 @@ import { api } from "../api";
 type ConfigItem = { var: string; kind: string; data: Record<string, unknown> };
 type LlmConfig = { configs: ConfigItem[]; extras: Record<string, unknown>; path: string };
 
-const KIND_LABELS: Record<string, string> = {
-  claude: "Claude", oai: "OpenAI", native_claude: "Native Claude",
-  native_oai: "Native OAI", mixin: "Mixin", unknown: "Custom",
-};
+// ── Tab definitions ──────────────────────────────────────
+const TABS = [
+  { id: "claude",  label: "Claude Code", kinds: ["claude"],        color: "#D4915D", initials: "CC" },
+  { id: "oai",     label: "Codex / OAI", kinds: ["oai"],           color: "#10A37F", initials: "OA" },
+  { id: "native",  label: "Native",      kinds: ["native_claude", "native_oai"], color: "#7C6AF7", initials: "NA" },
+  { id: "custom",  label: "Custom",      kinds: ["mixin", "unknown"],             color: "#6B7280", initials: "CU" },
+] as const;
+type TabId = typeof TABS[number]["id"];
 
-const PRESETS: Array<{ label: string; var: string; kind: string; data: Record<string, unknown> }> = [
-  { label: "Claude Code", var: "CLAUDE_API", kind: "claude", data: { apikey: "", apibase: "https://api.anthropic.com", model: "claude-opus-4-5" } },
-  { label: "OpenAI / Codex", var: "OAI_API", kind: "oai", data: { apikey: "", apibase: "https://api.openai.com/v1", model: "gpt-4o" } },
-  { label: "OpenAI-compat (custom)", var: "CUSTOM_OAI", kind: "oai", data: { apikey: "", apibase: "", model: "" } },
-  { label: "Native Claude", var: "NATIVE_CLAUDE_API", kind: "native_claude", data: { apikey: "", apibase: "https://api.anthropic.com", model: "claude-opus-4-5" } },
-  { label: "Native OAI", var: "NATIVE_OAI_API", kind: "native_oai", data: { apikey: "", apibase: "https://api.openai.com/v1", model: "gpt-4o" } },
-  { label: "Blank", var: "", kind: "unknown", data: {} },
-];
-
-function kindColor(kind: string) {
-  if (kind === "claude" || kind === "native_claude") return "oklch(0.7 0.15 280)";
-  if (kind === "oai" || kind === "native_oai") return "oklch(0.7 0.15 145)";
-  if (kind === "mixin") return "oklch(0.75 0.15 60)";
-  return "var(--color-muted-foreground)";
+function tabForKind(kind: string): TabId {
+  for (const tab of TABS) {
+    if ((tab.kinds as readonly string[]).includes(kind)) return tab.id;
+  }
+  return "custom";
 }
 
-function ConfigCard({ item, active, onClick, onDelete }: {
-  item: ConfigItem; active: boolean; onClick: () => void; onDelete: () => void;
-}) {
+// ── Presets per tab ──────────────────────────────────────
+const PRESETS: Record<TabId, Array<{ label: string; var: string; kind: string; data: Record<string, unknown> }>> = {
+  claude: [
+    { label: "Anthropic Official", var: "CLAUDE_API", kind: "claude", data: { apikey: "", apibase: "https://api.anthropic.com", model: "claude-opus-4-5" } },
+    { label: "Custom Endpoint",    var: "CLAUDE_CUSTOM", kind: "claude", data: { apikey: "", apibase: "", model: "claude-opus-4-5" } },
+  ],
+  oai: [
+    { label: "OpenAI Official",    var: "OAI_API",    kind: "oai", data: { apikey: "", apibase: "https://api.openai.com/v1", model: "gpt-4o" } },
+    { label: "Custom OAI-compat",  var: "OAI_CUSTOM", kind: "oai", data: { apikey: "", apibase: "", model: "" } },
+  ],
+  native: [
+    { label: "Native Claude",      var: "NATIVE_CLAUDE", kind: "native_claude", data: { apikey: "", apibase: "https://api.anthropic.com", model: "claude-opus-4-5" } },
+    { label: "Native OAI",         var: "NATIVE_OAI",   kind: "native_oai",    data: { apikey: "", apibase: "https://api.openai.com/v1", model: "gpt-4o" } },
+  ],
+  custom: [
+    { label: "Mixin",  var: "MIXIN_API",  kind: "mixin",   data: {} },
+    { label: "Blank",  var: "CUSTOM_API", kind: "unknown", data: {} },
+  ],
+};
+
+// ── Avatar ───────────────────────────────────────────────
+function Avatar({ name, color }: { name: string; color: string }) {
+  const initials = name.slice(0, 2).toUpperCase() || "??";
   return (
-    <button
-      type="button"
-      className="cfg-card"
-      data-active={active ? "true" : "false"}
-      onClick={onClick}
-    >
-      <div className="cfg-card-top">
-        <span className="cfg-card-var">{item.var}</span>
-        <span className="cfg-card-kind" style={{ color: kindColor(item.kind) }}>
-          {KIND_LABELS[item.kind] ?? item.kind}
-        </span>
-      </div>
-      {item.data.model != null && <div className="cfg-card-model">{String(item.data.model)}</div>}
-      {item.data.apibase != null && <div className="cfg-card-base">{String(item.data.apibase)}</div>}
-      <div className="cfg-card-actions">
-        <button type="button" className="icon-btn-ghost danger" title="Delete"
-          onClick={(e) => { e.stopPropagation(); onDelete(); }}>
-          <Trash2 size={13} />
-        </button>
-        <ChevronRight size={13} style={{ color: "var(--color-muted-foreground)", marginLeft: "auto" }} />
-      </div>
-    </button>
+    <div className="cfg-avatar" style={{ background: color + "33", color }}>
+      {initials}
+    </div>
   );
 }
 
-function EditPanel({ item, onSave, onClose, t }: {
-  item: ConfigItem; onSave: (item: ConfigItem) => void; onClose: () => void; t: T;
+// ── Provider card ─────────────────────────────────────────
+function ProviderCard({ item, tabColor, onEdit, onDelete }: {
+  item: ConfigItem; tabColor: string; onEdit: () => void; onDelete: () => void;
 }) {
-  const [varName, setVarName] = useState(item.var);
-  const [apiKey, setApiKey] = useState(String(item.data.apikey ?? ""));
-  const [apiBase, setApiBase] = useState(String(item.data.apibase ?? ""));
-  const [model, setModel] = useState(String(item.data.model ?? ""));
-  const [rawJson, setRawJson] = useState(JSON.stringify(item.data, null, 2));
-  const [showRaw, setShowRaw] = useState(false);
-
-  function handleSave() {
-    let data: Record<string, unknown>;
-    if (showRaw) {
-      try { data = JSON.parse(rawJson); } catch { toast.error("Invalid JSON"); return; }
-    } else {
-      data = { ...item.data };
-      if (apiKey) data.apikey = apiKey;
-      if (apiBase) data.apibase = apiBase;
-      if (model) data.model = model;
-    }
-    onSave({ var: varName.trim(), kind: item.kind, data });
-  }
-
+  const apibase = item.data.apibase != null ? String(item.data.apibase) : "";
+  const model   = item.data.model   != null ? String(item.data.model)   : "";
   return (
-    <div className="cfg-panel">
-      <div className="cfg-panel-header">
-        <span className="cfg-panel-title">{varName || t("config.edit")}</span>
-        <button type="button" className="icon-btn-ghost" onClick={onClose}><X size={15} /></button>
+    <div className="cfg-provider-card">
+      <Avatar name={item.var} color={tabColor} />
+      <div className="cfg-provider-info">
+        <span className="cfg-provider-name">{item.var}</span>
+        {apibase && <span className="cfg-provider-url">{apibase}</span>}
+        {model   && <span className="cfg-provider-model">{model}</span>}
       </div>
-      <div className="cfg-panel-body">
-        <label className="cfg-field">
-          <span>{t("config.varName")}</span>
-          <input value={varName} onChange={(e) => setVarName(e.target.value)} placeholder="MY_API_CONFIG" />
-        </label>
-        {!showRaw && (
-          <>
-            <label className="cfg-field">
-              <span>{t("config.apiKey")}</span>
-              <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="sk-..." />
-            </label>
-            <label className="cfg-field">
-              <span>{t("config.apiBase")}</span>
-              <input value={apiBase} onChange={(e) => setApiBase(e.target.value)} placeholder="https://api.anthropic.com" />
-            </label>
-            <label className="cfg-field">
-              <span>{t("config.model")}</span>
-              <input value={model} onChange={(e) => setModel(e.target.value)} placeholder="claude-opus-4-5" />
-            </label>
-          </>
-        )}
-        {showRaw && (
-          <label className="cfg-field">
-            <span>{t("config.rawJson")}</span>
-            <textarea className="code-editor small" value={rawJson} onChange={(e) => setRawJson(e.target.value)} />
-          </label>
-        )}
-        <button type="button" className="cfg-toggle-raw" onClick={() => setShowRaw((v) => !v)}>
-          {showRaw ? "← 表单视图" : "{ } 原始 JSON"}
-        </button>
-      </div>
-      <div className="cfg-panel-footer">
-        <button type="button" className="ghost-btn" onClick={onClose}>{t("common.cancel")}</button>
-        <button type="button" className="primary-btn" onClick={handleSave}>{t("common.save")}</button>
+      <div className="cfg-provider-actions">
+        <button type="button" className="icon-btn-ghost" title="Edit" onClick={onEdit}><Edit2 size={13} /></button>
+        <button type="button" className="icon-btn-ghost danger" title="Delete" onClick={onDelete}><Trash2 size={13} /></button>
       </div>
     </div>
   );
 }
 
-function PresetPicker({ onPick, onClose }: { onPick: (p: typeof PRESETS[0]) => void; onClose: () => void }) {
+// ── Edit drawer ───────────────────────────────────────────
+function EditDrawer({ item, onSave, onClose }: {
+  item: ConfigItem; onSave: (item: ConfigItem) => void; onClose: () => void;
+}) {
+  const [varName, setVarName] = useState(item.var);
+  const [apiKey,  setApiKey]  = useState(String(item.data.apikey  ?? ""));
+  const [apiBase, setApiBase] = useState(String(item.data.apibase ?? ""));
+  const [model,   setModel]   = useState(String(item.data.model   ?? ""));
+  const [raw,     setRaw]     = useState(JSON.stringify(item.data, null, 2));
+  const [showRaw, setShowRaw] = useState(false);
+
+  function handleSave() {
+    let data: Record<string, unknown>;
+    if (showRaw) {
+      try { data = JSON.parse(raw); } catch { toast.error("Invalid JSON"); return; }
+    } else {
+      data = { ...item.data, apikey: apiKey, apibase: apiBase, model };
+    }
+    onSave({ var: varName.trim(), kind: item.kind, data });
+  }
+
+  return (
+    <div className="cfg-drawer-overlay" onClick={onClose}>
+      <div className="cfg-drawer" onClick={(e) => e.stopPropagation()}>
+        <div className="cfg-drawer-header">
+          <span className="cfg-drawer-title">{varName || "Edit Config"}</span>
+          <button type="button" className="icon-btn-ghost" onClick={onClose}><X size={15} /></button>
+        </div>
+        <div className="cfg-drawer-body">
+          <label className="cfg-field"><span>Variable name</span>
+            <input value={varName} onChange={(e) => setVarName(e.target.value)} placeholder="MY_API_CONFIG" />
+          </label>
+          {!showRaw && <>
+            <label className="cfg-field"><span>API Key</span>
+              <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="sk-..." />
+            </label>
+            <label className="cfg-field"><span>API Base URL</span>
+              <input value={apiBase} onChange={(e) => setApiBase(e.target.value)} placeholder="https://api.anthropic.com" />
+            </label>
+            <label className="cfg-field"><span>Model</span>
+              <input value={model} onChange={(e) => setModel(e.target.value)} placeholder="claude-opus-4-5" />
+            </label>
+          </>}
+          {showRaw && <label className="cfg-field"><span>Raw JSON</span>
+            <textarea className="code-editor small" value={raw} onChange={(e) => setRaw(e.target.value)} />
+          </label>}
+          <button type="button" className="cfg-toggle-raw" onClick={() => setShowRaw((v) => !v)}>
+            {showRaw ? "← Form view" : "{ } Raw JSON"}
+          </button>
+        </div>
+        <div className="cfg-drawer-footer">
+          <button type="button" className="ghost-btn" onClick={onClose}>Cancel</button>
+          <button type="button" className="primary-btn" onClick={handleSave}>Save</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Preset picker modal ───────────────────────────────────
+function PresetModal({ tabId, onPick, onClose }: {
+  tabId: TabId; onPick: (p: { label: string; var: string; kind: string; data: Record<string, unknown> }) => void; onClose: () => void;
+}) {
+  const tab = TABS.find((t) => t.id === tabId)!;
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-panel" style={{ width: "min(420px,100%)" }} onClick={(e) => e.stopPropagation()}>
+      <div className="modal-panel" style={{ width: "min(400px,100%)" }} onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <span className="modal-title">从预设创建</span>
+          <span className="modal-title">Add {tab.label} Config</span>
           <button type="button" className="icon-btn-ghost" onClick={onClose}><X size={15} /></button>
         </div>
         <div className="modal-body" style={{ gap: 6 }}>
-          {PRESETS.map((p) => (
+          {PRESETS[tabId].map((p) => (
             <button key={p.label} type="button" className="cfg-preset-row" onClick={() => onPick(p)}>
-              <span className="cfg-preset-label">{p.label}</span>
-              <span className="cfg-preset-kind" style={{ color: kindColor(p.kind) }}>{KIND_LABELS[p.kind] ?? p.kind}</span>
+              <Avatar name={p.var || p.label} color={tab.color} />
+              <div style={{ flex: 1, textAlign: "left" }}>
+                <div className="cfg-preset-label">{p.label}</div>
+                {p.data.apibase != null && <div className="cfg-preset-url">{String(p.data.apibase)}</div>}
+              </div>
             </button>
           ))}
         </div>
@@ -147,15 +163,17 @@ function PresetPicker({ onPick, onClose }: { onPick: (p: typeof PRESETS[0]) => v
   );
 }
 
+// ── Main page ─────────────────────────────────────────────
 export function ConfigPage({ token, t }: { token: string; t: T }) {
   const config = useAsyncData<LlmConfig>(token, "/api/config/llm", { configs: [], extras: {}, path: "" });
   const [configs, setConfigs] = useState<ConfigItem[]>([]);
-  const [selected, setSelected] = useState<number | null>(null);
+  const [activeTab, setActiveTab] = useState<TabId>("claude");
+  const [editing, setEditing] = useState<number | null>(null);
   const [showPreset, setShowPreset] = useState(false);
 
   useEffect(() => { setConfigs(config.data.configs); }, [config.data.configs]);
 
-  async function save(items: ConfigItem[]) {
+  async function persist(items: ConfigItem[]) {
     await api("/api/config/llm", token, {
       method: "PUT",
       body: JSON.stringify({ configs: items, extras: config.data.extras || {} }),
@@ -165,68 +183,81 @@ export function ConfigPage({ token, t }: { token: string; t: T }) {
     await config.refresh();
   }
 
-  function handleSaveItem(idx: number, item: ConfigItem) {
+  function handleSave(idx: number, item: ConfigItem) {
     const next = configs.map((c, i) => (i === idx ? item : c));
-    setConfigs(next);
-    save(next);
-    setSelected(null);
+    setConfigs(next); persist(next); setEditing(null);
   }
 
   function handleDelete(idx: number) {
     const next = configs.filter((_, i) => i !== idx);
-    setConfigs(next);
-    save(next);
-    if (selected === idx) setSelected(null);
+    setConfigs(next); persist(next);
+    if (editing === idx) setEditing(null);
   }
 
-  function handlePreset(p: typeof PRESETS[0]) {
+  function handlePreset(p: { label: string; var: string; kind: string; data: Record<string, unknown> }) {
     const item: ConfigItem = { var: p.var, kind: p.kind, data: { ...p.data } };
     const next = [...configs, item];
     setConfigs(next);
-    setSelected(next.length - 1);
+    setEditing(next.length - 1);
     setShowPreset(false);
   }
 
-  const editItem = selected !== null ? configs[selected] : null;
+  const tab = TABS.find((t) => t.id === activeTab)!;
+  const tabItems = configs
+    .map((c, i) => ({ c, i }))
+    .filter(({ c }) => tabForKind(c.kind) === activeTab);
 
   return (
-    <div className="cfg-layout">
-      <div className="cfg-list-pane">
-        <div className="cfg-list-header">
-          <span className="cfg-list-title">{t("nav.config")}</span>
-          <button type="button" className="icon-btn-ghost" title={t("config.add")} onClick={() => setShowPreset(true)}>
-            <Plus size={15} />
+    <div className="cfg-page">
+      {/* Agent tabs */}
+      <div className="cfg-tabs">
+        {TABS.map((tb) => {
+          const count = configs.filter((c) => tabForKind(c.kind) === tb.id).length;
+          return (
+            <button
+              key={tb.id}
+              type="button"
+              className="cfg-tab"
+              data-active={activeTab === tb.id ? "true" : "false"}
+              onClick={() => setActiveTab(tb.id)}
+            >
+              <span className="cfg-tab-dot" style={{ background: tb.color }} />
+              {tb.label}
+              {count > 0 && <span className="cfg-tab-count">{count}</span>}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Provider list */}
+      <div className="cfg-providers">
+        <div className="cfg-providers-header">
+          <span className="cfg-providers-title" style={{ color: tab.color }}>{tab.label}</span>
+          <button type="button" className="create-run-btn" onClick={() => setShowPreset(true)}>
+            <Plus size={13} /> Add
           </button>
         </div>
-        <div className="cfg-list">
-          {configs.length === 0 && (
-            <div className="empty-state">{t("config.noConfigs")}</div>
+
+        <div className="cfg-providers-list">
+          {tabItems.length === 0 && (
+            <div className="empty-state">No {tab.label} configs — click Add</div>
           )}
-          {configs.map((item, i) => (
-            <ConfigCard key={i} item={item} active={selected === i}
-              onClick={() => setSelected(i === selected ? null : i)}
+          {tabItems.map(({ c, i }) => (
+            <ProviderCard key={i} item={c} tabColor={tab.color}
+              onEdit={() => setEditing(i)}
               onDelete={() => handleDelete(i)} />
           ))}
         </div>
-        <div className="cfg-list-footer">
+
+        <div className="cfg-providers-footer">
           <span style={{ fontSize: 11, color: "var(--color-muted-foreground)" }}>{config.data.path}</span>
         </div>
       </div>
 
-      {editItem !== null && selected !== null && (
-        <EditPanel item={editItem} t={t}
-          onSave={(item) => handleSaveItem(selected, item)}
-          onClose={() => setSelected(null)} />
+      {editing !== null && configs[editing] && (
+        <EditDrawer item={configs[editing]} onSave={(item) => handleSave(editing, item)} onClose={() => setEditing(null)} />
       )}
-
-      {!editItem && (
-        <div className="empty-state centered" style={{ flex: 1 }}>
-          <Settings2 size={32} style={{ opacity: 0.2, marginBottom: 8 }} />
-          <span>{configs.length === 0 ? t("config.noConfigs") : "选择一个配置进行编辑"}</span>
-        </div>
-      )}
-
-      {showPreset && <PresetPicker onPick={handlePreset} onClose={() => setShowPreset(false)} />}
+      {showPreset && <PresetModal tabId={activeTab} onPick={handlePreset} onClose={() => setShowPreset(false)} />}
     </div>
   );
 }
