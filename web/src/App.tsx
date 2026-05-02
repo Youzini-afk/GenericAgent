@@ -1,10 +1,11 @@
 import { Bot, KeyRound, Loader2 } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, api, login } from "./api";
-import type { Lang, PageKey, StatusInfo, Task, WorkerInfo } from "./lib/types";
+import type { CliRun, CliRunEvent, Lang, PageKey, StatusInfo, Task, WorkerInfo } from "./lib/types";
 import { makeT, getInitialLang } from "./lib/i18n";
 import type { T } from "./lib/i18n";
 import { useAsyncData } from "./hooks";
+import { useCliRunStream } from "./useCliRunStream";
 import { AppShell } from "./components/layout/AppShell";
 import { ChatPage } from "./pages/ChatPage";
 import { WorkersPage } from "./pages/WorkersPage";
@@ -57,6 +58,33 @@ function Login({ onLogin, t }: { onLogin: (token: string) => void; t: T }) {
   );
 }
 
+function RunDetailLoader({ runId, token, t, children }: {
+  runId: string; token: string; t: T;
+  children: (detail: { run: CliRun; events: CliRunEvent[]; diff: string; result: Record<string, unknown> } | undefined) => React.ReactNode;
+}) {
+  const [run, setRun] = useState<CliRun | undefined>();
+  const [diff, setDiff] = useState("");
+  const [result, setResult] = useState<Record<string, unknown>>({});
+  const wsEvents = useCliRunStream(runId, token);
+
+  const loadStatic = useCallback(async () => {
+    if (!runId) return;
+    const [runData, diffData, resultData] = await Promise.all([
+      api<CliRun>(`/api/cli-runs/${runId}`, token),
+      api<{ content: string }>(`/api/cli-runs/${runId}/diff`, token),
+      api<Record<string, unknown>>(`/api/cli-runs/${runId}/result`, token)
+    ]);
+    setRun(runData);
+    setDiff(diffData.content);
+    setResult(resultData);
+  }, [runId, token]);
+
+  useEffect(() => { loadStatic().catch(() => undefined); }, [loadStatic]);
+
+  if (!run) return <>{children(undefined)}</>;
+  return <>{children({ run, events: wsEvents, diff, result })}</>;
+}
+
 function AppShellWrapper({ token, setToken, lang, setLang, t }: {
   token: string; setToken: (token: string) => void;
   lang: Lang; setLang: (lang: Lang) => void; t: T;
@@ -74,7 +102,7 @@ function AppShellWrapper({ token, setToken, lang, setLang, t }: {
   }
 
   const content = {
-    chat: <ChatPage token={token} t={t} onOpenRun={(runId) => { setSelectedCliRun(runId); setPage("agentRuns"); }} />,
+    chat: <ChatPage token={token} t={t} onOpenRun={(runId) => { setSelectedCliRun(runId); }} />,
     workers: <WorkersPage token={token} t={t} />,
     queue: <QueuePage token={token} t={t} />,
     cliTools: <CliToolsPage token={token} t={t} />,
@@ -88,13 +116,17 @@ function AppShellWrapper({ token, setToken, lang, setLang, t }: {
   }[page];
 
   return (
-    <AppShell t={t} lang={lang} setLang={setLang} page={page} setPage={setPage} onLogout={logout}
-      workers={workers.data} activeTasks={activeTasks} status={status.data}>
-      {content}
-      {(status.error || workers.error || tasks.error) && (
-        <div className="toast">{status.error || workers.error || tasks.error}</div>
+    <RunDetailLoader runId={selectedCliRun} token={token} t={t}>
+      {(runDetail) => (
+        <AppShell t={t} lang={lang} setLang={setLang} page={page} setPage={setPage} onLogout={logout}
+          workers={workers.data} activeTasks={activeTasks} status={status.data} runDetail={runDetail}>
+          {content}
+          {(status.error || workers.error || tasks.error) && (
+            <div className="toast">{status.error || workers.error || tasks.error}</div>
+          )}
+        </AppShell>
       )}
-    </AppShell>
+    </RunDetailLoader>
   );
 }
 
