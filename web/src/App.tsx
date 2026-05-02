@@ -1,5 +1,6 @@
 import { Bot, KeyRound, Loader2 } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { Toaster, toast } from "sonner";
 import { ApiError, api, login } from "./api";
 import type { CliRun, CliRunEvent, Lang, PageKey, StatusInfo, Task, WorkerInfo } from "./lib/types";
 import { makeT, getInitialLang } from "./lib/i18n";
@@ -96,6 +97,11 @@ function AppShellWrapper({ token, setToken, lang, setLang, t }: {
   const tasks = useAsyncData<Task[]>(token, "/api/tasks", [], 4000);
   const activeTasks = tasks.data.filter((task) => ["pending", "leased", "running"].includes(task.status));
 
+  useEffect(() => {
+    const err = status.error || workers.error || tasks.error;
+    if (err) toast.error(err);
+  }, [status.error, workers.error, tasks.error]);
+
   function logout() {
     localStorage.removeItem("ga_token");
     setToken("");
@@ -121,9 +127,6 @@ function AppShellWrapper({ token, setToken, lang, setLang, t }: {
         <AppShell t={t} lang={lang} setLang={setLang} page={page} setPage={setPage} onLogout={logout}
           workers={workers.data} activeTasks={activeTasks} status={status.data} runDetail={runDetail}>
           {content}
-          {(status.error || workers.error || tasks.error) && (
-            <div className="toast">{status.error || workers.error || tasks.error}</div>
-          )}
         </AppShell>
       )}
     </RunDetailLoader>
@@ -150,5 +153,10 @@ export default function App() {
     });
   }, [token]);
 
-  return token ? <AppShellWrapper token={token} setToken={setToken} lang={lang} setLang={setLang} t={t} /> : <Login onLogin={setToken} t={t} />;
+  return (
+    <>
+      <Toaster theme="dark" position="bottom-right" />
+      {token ? <AppShellWrapper token={token} setToken={setToken} lang={lang} setLang={setLang} t={t} /> : <Login onLogin={setToken} t={t} />}
+    </>
+  );
 }

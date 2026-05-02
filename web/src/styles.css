@@ -470,8 +470,16 @@ th { color: var(--color-muted-foreground); font-size: 12px; font-weight: 700; ba
 .spin { animation: spin 0.9s linear infinite; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
+@keyframes shimmer-slide { 0% { transform: translateX(-150%); } 100% { transform: translateX(350%); } }
 
 strong { color: var(--color-foreground); }
+
+/* Custom scrollbars */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-accent); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-muted-foreground); }
+* { scrollbar-width: thin; scrollbar-color: var(--color-accent) transparent; }
 
 @media (max-width: 960px) {
   .app-shell { grid-template-columns: 1fr; }

@@ -1,10 +1,12 @@
 import { Code2, HardDrive, KeyRound, Play, RefreshCw, Save } from "lucide-react";
 import { FormEvent, useState } from "react";
+import { toast } from "sonner";
 import type { CliTool, CliEnvProfile, CliProviderProfile } from "../lib/types";
 import type { T } from "../lib/i18n";
 import { asText, fmtTime, toolStatusLabel } from "../lib/utils";
 import { useAsyncData } from "../hooks";
 import { IconButton, Section } from "../components/ui/primitives";
+import { StatusIcon } from "../components/common/StatusIcon";
 import { api } from "../api";
 
 export function CliToolsPage({ token, t }: { token: string; t: T }) {
@@ -14,18 +16,17 @@ export function CliToolsPage({ token, t }: { token: string; t: T }) {
   const [versions, setVersions] = useState<Record<string, string>>({});
   const [profile, setProfile] = useState({ name: "", tool_id: "codex" });
   const [envText, setEnvText] = useState('{\n  "OPENAI_API_KEY": ""\n}');
-  const [notice, setNotice] = useState("");
 
   async function install(toolId: string) {
-    setNotice(t("cliTools.installing", { id: toolId }));
+    const id = toast.loading(t("cliTools.installing", { id: toolId }));
     await api(`/api/cli-tools/${toolId}/install`, token, { method: "POST", body: JSON.stringify({ version: versions[toolId] || "latest" }) });
-    setNotice(t("cliTools.installed", { id: toolId }));
+    toast.success(t("cliTools.installed", { id: toolId }), { id });
     await tools.refresh();
   }
 
   async function test(toolId: string) {
     const result = await api<Record<string, unknown>>(`/api/cli-tools/${toolId}/test`, token, { method: "POST" });
-    setNotice(`${toolId}: ${asText(result.detected_version || result.stderr || result.stdout)}`);
+    toast.info(`${toolId}: ${asText(result.detected_version || result.stderr || result.stdout)}`);
     await tools.refresh();
   }
 
@@ -39,22 +40,30 @@ export function CliToolsPage({ token, t }: { token: string; t: T }) {
 
   return (
     <div className="two-column wide-left">
-      <Section title={t("cliTools.title")} icon={<Code2 size={18} />} actions={<>{notice && <span className="badge neutral">{notice}</span>}<IconButton title={t("common.refresh")} onClick={tools.refresh}><RefreshCw size={16} /></IconButton></>}>
+      <Section title={t("cliTools.title")} icon={<Code2 size={18} />} actions={<IconButton title={t("common.refresh")} onClick={tools.refresh}><RefreshCw size={16} /></IconButton>}>
         <div className="tool-grid">
           {tools.data.items.map((tool) => {
             const pp = providerProfiles.data.items.find((p) => p.provider === tool.id);
             return (
               <article className="flat-card" key={tool.id}>
                 <div className="card-row">
-                  <strong>{tool.name}</strong>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <StatusIcon status={tool.status === "installed" ? "succeeded" : tool.status === "broken" ? "failed" : tool.status === "installing" ? "running" : "pending"} size={14} />
+                    <strong>{tool.name}</strong>
+                  </div>
                   <span className={tool.status === "installed" ? "badge ok" : tool.status === "broken" ? "badge bad" : "badge neutral"}>{toolStatusLabel(t, tool.status)}</span>
                 </div>
+                {tool.status === "installing" && (
+                  <div style={{ height: 2, background: "var(--color-muted)", borderRadius: 1, overflow: "hidden", margin: "4px 0" }}>
+                    <div style={{ height: "100%", width: "40%", background: "var(--color-primary)", borderRadius: 1, animation: "shimmer-slide 1.2s ease-in-out infinite" }} />
+                  </div>
+                )}
                 <dl className="kv">
                   <dt>{t("cliTools.package")}</dt><dd>{tool.package || "-"}</dd>
                   <dt>{t("cliTools.version")}</dt><dd>{tool.resolved_version || tool.requested_version || "-"}</dd>
                   <dt>{t("cliTools.command")}</dt><dd>{tool.command_path || tool.command || "-"}</dd>
                   <dt>{t("cliTools.error")}</dt><dd>{tool.error || "-"}</dd>
-                  <dt>{t("cliTools.strengths")}</dt><dd>{pp?.strengths?.join(", ") || "-"}</dd>
+                  <dt>{t("cliTools.strengths")}</dt><dd>{pp?.strengths?.length ? <span style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>{pp.strengths.map((s) => <span key={s} className="badge neutral" style={{ fontSize: 10, padding: "1px 5px" }}>{s}</span>)}</span> : "-"}</dd>
                   <dt>{t("cliTools.recent")}</dt><dd>{pp ? `${pp.recent_success}/${pp.recent_failure}` : "-"}</dd>
                   <dt>{t("cliTools.notes")}</dt><dd>{pp?.notes?.slice(-2).join("; ") || "-"}</dd>
                 </dl>

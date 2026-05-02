@@ -1,5 +1,6 @@
 import { Save, Settings2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import type { LlmConfig } from "../lib/types";
 import type { T } from "../lib/i18n";
 import { asText } from "../lib/utils";
@@ -10,7 +11,6 @@ import { api } from "../api";
 export function ConfigPage({ token, t }: { token: string; t: T }) {
   const config = useAsyncData<LlmConfig>(token, "/api/config/llm", { configs: [], extras: {}, path: "" });
   const [draft, setDraft] = useState("");
-  const [notice, setNotice] = useState("");
 
   useEffect(() => { setDraft(JSON.stringify(config.data.configs, null, 2)); }, [config.data.configs]);
 
@@ -18,12 +18,12 @@ export function ConfigPage({ token, t }: { token: string; t: T }) {
     const configs = JSON.parse(draft || "[]");
     await api("/api/config/llm", token, { method: "PUT", body: JSON.stringify({ configs, extras: config.data.extras || {} }) });
     await api("/api/runtime/reload", token, { method: "POST" });
-    setNotice(t("config.saved"));
+    toast.success(t("config.saved"));
     await config.refresh();
   }
 
   return (
-    <Section title={t("nav.config")} icon={<Settings2 size={18} />} actions={<>{notice && <span className="badge ok">{notice}</span>}<button className="primary-btn" type="button" onClick={save}><Save size={16} />{t("common.save")}</button></>}>
+    <Section title={t("nav.config")} icon={<Settings2 size={18} />} actions={<button className="primary-btn" type="button" onClick={save}><Save size={16} />{t("common.save")}</button>}>
       <div className="split">
         <div className="flat-card">
           <dl className="kv">
