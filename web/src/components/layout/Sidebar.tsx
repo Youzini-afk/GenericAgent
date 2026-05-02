@@ -23,7 +23,7 @@ const navItems: Array<{ key: PageKey; labelKey: I18nKey; icon: ReactNode }> = [
 export function Sidebar({ page, setPage, t, onLogout }: { page: PageKey; setPage: (p: PageKey) => void; t: T; onLogout: () => void }) {
   return (
     <aside style={{
-      width: 200, minWidth: 160, display: "flex", flexDirection: "column", gap: 4,
+      width: "100%", height: "100%", minWidth: 0, display: "flex", flexDirection: "column", gap: 4,
       padding: "12px 8px", background: "var(--color-sidebar)",
       borderRight: "1px solid var(--color-border)", overflowY: "auto", flexShrink: 0
     }}>
@@ -46,8 +46,7 @@ export function Sidebar({ page, setPage, t, onLogout }: { page: PageKey; setPage
                 background: active ? "oklch(0.985 0 0 / 8%)" : "transparent",
                 color: active ? "var(--color-foreground)" : "var(--color-muted-foreground)",
                 fontWeight: active ? 600 : 400, fontSize: 13,
-                transition: "background 120ms, color 120ms", cursor: "pointer",
-                letterSpacing: active ? "-0.00625rem" : undefined
+                transition: "background 120ms, color 120ms", cursor: "pointer"
               }}
               onMouseEnter={(e) => { if (!active) { (e.currentTarget as HTMLButtonElement).style.background = "var(--color-accent)"; (e.currentTarget as HTMLButtonElement).style.color = "var(--color-foreground)"; } }}
               onMouseLeave={(e) => { if (!active) { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; (e.currentTarget as HTMLButtonElement).style.color = "var(--color-muted-foreground)"; } }}

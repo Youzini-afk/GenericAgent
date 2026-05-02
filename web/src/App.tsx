@@ -20,6 +20,8 @@ import { FilesPage } from "./pages/FilesPage";
 import { BrowserPage } from "./pages/BrowserPage";
 import { LogsPage } from "./pages/LogsPage";
 
+const FINAL_CLI_RUN_EVENTS = ["done", "error", "canceled"];
+
 function Login({ onLogin, t }: { onLogin: (token: string) => void; t: T }) {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -67,6 +69,7 @@ function RunDetailLoader({ runId, token, t, children }: {
   const [diff, setDiff] = useState("");
   const [result, setResult] = useState<Record<string, unknown>>({});
   const wsEvents = useCliRunStream(runId, token);
+  const lastCliRunEvent = wsEvents[wsEvents.length - 1];
 
   const loadStatic = useCallback(async () => {
     if (!runId) return;
@@ -80,7 +83,21 @@ function RunDetailLoader({ runId, token, t, children }: {
     setResult(resultData);
   }, [runId, token]);
 
-  useEffect(() => { loadStatic().catch(() => undefined); }, [loadStatic]);
+  useEffect(() => {
+    if (!runId) {
+      setRun(undefined);
+      setDiff("");
+      setResult({});
+      return;
+    }
+    loadStatic().catch(() => undefined);
+  }, [loadStatic, runId]);
+
+  useEffect(() => {
+    if (lastCliRunEvent && FINAL_CLI_RUN_EVENTS.includes(lastCliRunEvent.type)) {
+      loadStatic().catch(() => undefined);
+    }
+  }, [lastCliRunEvent, loadStatic]);
 
   if (!run) return <>{children(undefined)}</>;
   return <>{children({ run, events: wsEvents, diff, result })}</>;

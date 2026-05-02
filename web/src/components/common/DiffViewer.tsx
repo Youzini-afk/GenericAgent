@@ -1,5 +1,7 @@
-export function DiffViewer({ content }: { content: string }) {
-  if (!content) return <div className="empty">No diff</div>;
+import type { T } from "../../lib/i18n";
+
+export function DiffViewer({ content, t }: { content: string; t: T }) {
+  if (!content) return <div className="empty">{t("diff.noDiff")}</div>;
   return (
     <pre style={{ fontSize: 12, lineHeight: 1.6, margin: 0, overflow: "auto" }}>
       {content.split("\n").map((line, i) => {

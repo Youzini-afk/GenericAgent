@@ -4,8 +4,11 @@ import type { CliRun, CliEnvProfile } from "../lib/types";
 import type { T } from "../lib/i18n";
 import { shortId, fmtTime, asText, changedCount, orchestrationMeta, statusLabel, cliStatusClass, policyLabel } from "../lib/utils";
 import { useAsyncData } from "../hooks";
+import { useCliRunStream } from "../useCliRunStream";
 import { IconButton, Section } from "../components/ui/primitives";
 import { api } from "../api";
+
+const FINAL_CLI_RUN_EVENTS = ["done", "error", "canceled"];
 
 export function AgentRunsPage({ token, t, selectedRunId, onSelectedRun }: {
   token: string; t: T; selectedRunId?: string; onSelectedRun?: (runId: string) => void;
@@ -18,9 +21,10 @@ export function AgentRunsPage({ token, t, selectedRunId, onSelectedRun }: {
     allow_tests: true, allow_install: false, allow_network: true, allow_commit: false, allow_push: false, env_profile_id: ""
   });
   const [selected, setSelectedState] = useState("");
-  const [events, setEvents] = useState<Array<{ seq: number; type: string; payload: Record<string, unknown>; created_at: number }>>([]);
   const [diff, setDiff] = useState("");
   const [result, setResult] = useState<Record<string, unknown>>({});
+  const events = useCliRunStream(selected, token);
+  const lastCliRunEvent = events[events.length - 1];
   const selectedRun = runs.data.items.find((item) => item.id === selected);
   const selectedMeta = orchestrationMeta(selectedRun);
 
@@ -51,21 +55,29 @@ export function AgentRunsPage({ token, t, selectedRunId, onSelectedRun }: {
 
   const loadDetail = useCallback(async () => {
     if (!selected) return;
-    const [eventData, diffData, resultData] = await Promise.all([
-      api<{ events: typeof events }>(`/api/cli-runs/${selected}/events?limit=500`, token),
+    const [diffData, resultData] = await Promise.all([
       api<{ content: string }>(`/api/cli-runs/${selected}/diff`, token),
       api<Record<string, unknown>>(`/api/cli-runs/${selected}/result`, token)
     ]);
-    setEvents(eventData.events);
     setDiff(diffData.content);
     setResult(resultData);
   }, [selected, token]);
 
   useEffect(() => {
+    if (!selected) {
+      setDiff("");
+      setResult({});
+      return;
+    }
     loadDetail().catch(() => undefined);
-    const timer = window.setInterval(() => loadDetail().catch(() => undefined), 2000);
-    return () => window.clearInterval(timer);
-  }, [loadDetail]);
+  }, [loadDetail, selected]);
+
+  useEffect(() => {
+    if (lastCliRunEvent && FINAL_CLI_RUN_EVENTS.includes(lastCliRunEvent.type)) {
+      loadDetail().catch(() => undefined);
+      runs.refresh().catch(() => undefined);
+    }
+  }, [lastCliRunEvent, loadDetail, runs.refresh]);
 
   async function cancel(runId: string) {
     await api(`/api/cli-runs/${runId}/cancel`, token, { method: "POST" });
@@ -127,7 +139,7 @@ export function AgentRunsPage({ token, t, selectedRunId, onSelectedRun }: {
           <div className="run-detail">
             <dl className="kv">
               <dt>{t("agentRuns.workspace")}</dt><dd>{selectedRun.effective_workspace || selectedRun.target_workspace}</dd>
-              <dt>{t("table.provider")}</dt><dd>{selectedRun.provider} · {selectedMeta.mode || "-"}</dd>
+              <dt>{t("table.provider")}</dt><dd>{selectedRun.provider} - {selectedMeta.mode || "-"}</dd>
               <dt>{t("agentRuns.parentSession")}</dt><dd>{selectedRun.parent_session_id || "-"}</dd>
               <dt>{t("agentRuns.parentTask")}</dt><dd>{selectedRun.parent_task_id || "-"}</dd>
               <dt>{t("agentRuns.providerReason")}</dt><dd>{selectedMeta.providerReason || "-"}</dd>

@@ -6,7 +6,7 @@ export function TerminalPanel({ t, children }: { t: T; children?: ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   return (
     <div style={{
-      height: collapsed ? 32 : 220, flexShrink: 0,
+      height: "100%", minHeight: collapsed ? 32 : 0, flexShrink: 0,
       display: "flex", flexDirection: "column",
       background: "var(--color-muted)", borderTop: "1px solid var(--color-border)",
       transition: "height 150ms"
@@ -16,7 +16,7 @@ export function TerminalPanel({ t, children }: { t: T; children?: ReactNode }) {
         padding: "0 12px", borderBottom: collapsed ? 0 : "1px solid var(--color-border)",
         flexShrink: 0
       }}>
-        <span style={{ fontSize: 12, color: "var(--color-muted-foreground)", fontWeight: 600 }}>Terminal</span>
+        <span style={{ fontSize: 12, color: "var(--color-muted-foreground)", fontWeight: 600 }}>{t("common.terminal")}</span>
         <button
           type="button"
           onClick={() => setCollapsed((v) => !v)}
@@ -27,7 +27,7 @@ export function TerminalPanel({ t, children }: { t: T; children?: ReactNode }) {
       </div>
       {!collapsed && (
         <div style={{ flex: 1, overflow: "auto", padding: 8 }}>
-          {children || <span style={{ fontSize: 12, color: "var(--color-muted-foreground)" }}>No output</span>}
+          {children || <span style={{ fontSize: 12, color: "var(--color-muted-foreground)" }}>{t("common.noOutput")}</span>}
         </div>
       )}
     </div>

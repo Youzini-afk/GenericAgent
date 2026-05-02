@@ -9,9 +9,9 @@ export function StatusBar({ t, workers, activeTasks, status }: { t: T; workers: 
       borderTop: "1px solid var(--color-border)", flexShrink: 0, fontSize: 11,
       color: "var(--color-muted-foreground)"
     }}>
-      <span>workers: {workers.filter((w) => w.alive).length}/{workers.length || status?.worker_concurrency || 0}</span>
-      <span>tasks: {activeTasks.length}</span>
-      <span>cli: {status?.active_cli_runs ?? 0}</span>
+      <span>{t("statusBar.workers")}: {workers.filter((w) => w.alive).length}/{workers.length || status?.worker_concurrency || 0}</span>
+      <span>{t("statusBar.tasks")}: {activeTasks.length}</span>
+      <span>{t("statusBar.cli")}: {status?.active_cli_runs ?? 0}</span>
       {status?.data_dir && <span style={{ marginLeft: "auto", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{status.data_dir}</span>}
     </footer>
   );

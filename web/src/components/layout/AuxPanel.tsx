@@ -10,17 +10,17 @@ function RunDetail({ run, events, diff, result, t }: {
   run: CliRun; events: CliRunEvent[]; diff: string; result: Record<string, unknown>; t: T;
 }) {
   const meta = orchestrationMeta(run);
+  const tabs = [
+    { value: "events", label: t("tabs.events") },
+    { value: "diff", label: t("tabs.diff") },
+    { value: "result", label: t("tabs.result") }
+  ];
   return (
     <Tabs.Root defaultValue="events" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <Tabs.List style={{ display: "flex", borderBottom: "1px solid var(--color-border)", flexShrink: 0 }}>
-        {["events", "diff", "result"].map((tab) => (
-          <Tabs.Trigger key={tab} value={tab} style={{
-            padding: "6px 12px", fontSize: 12, background: "transparent", border: 0,
-            borderBottom: "2px solid transparent", cursor: "pointer", color: "var(--color-muted-foreground)"
-          }}
-            data-state-active-style={{ borderBottomColor: "var(--color-foreground)", color: "var(--color-foreground)" }}
-          >
-            {tab.charAt(0).toUpperCase() + tab.slice(1)}
+        {tabs.map((tab) => (
+          <Tabs.Trigger key={tab.value} value={tab.value} className="tab-trigger">
+            {tab.label}
           </Tabs.Trigger>
         ))}
       </Tabs.List>
@@ -31,19 +31,19 @@ function RunDetail({ run, events, diff, result, t }: {
           </pre>
         </Tabs.Content>
         <Tabs.Content value="diff">
-          <DiffViewer content={diff} />
+          <DiffViewer content={diff} t={t} />
         </Tabs.Content>
         <Tabs.Content value="result" style={{ padding: 8 }}>
           {result.summary != null && <div style={{ marginBottom: 8, fontSize: 13 }}>{String(result.summary as string)}</div>}
           {Array.isArray(result.changed_files) && result.changed_files.length > 0 && (
             <div style={{ marginBottom: 8 }}>
-              <div style={{ fontSize: 11, color: "var(--color-muted-foreground)", marginBottom: 4 }}>Changed files ({changedCount(result)})</div>
+              <div style={{ fontSize: 11, color: "var(--color-muted-foreground)", marginBottom: 4 }}>{t("agentRuns.changedFiles")} ({changedCount(result)})</div>
               {(result.changed_files as string[]).map((f, i) => <div key={i} style={{ fontSize: 12, fontFamily: "monospace" }}>{f}</div>)}
             </div>
           )}
           {Array.isArray(result.blockers) && result.blockers.length > 0 && (
             <div style={{ marginBottom: 8 }}>
-              <div style={{ fontSize: 11, color: "var(--color-destructive)", marginBottom: 4 }}>Blockers</div>
+              <div style={{ fontSize: 11, color: "var(--color-destructive)", marginBottom: 4 }}>{t("agentRuns.blockers")}</div>
               {(result.blockers as string[]).map((b, i) => <div key={i} style={{ fontSize: 12, color: "var(--color-destructive)" }}>{b}</div>)}
             </div>
           )}
@@ -53,7 +53,7 @@ function RunDetail({ run, events, diff, result, t }: {
       <div style={{ padding: "8px 12px", borderTop: "1px solid var(--color-border)", display: "flex", gap: 8, flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
           <StatusIcon status={run.status} size={10} />
-          <span style={{ fontSize: 12, color: "var(--color-muted-foreground)" }}>{run.provider} · {meta.mode || "-"}</span>
+          <span style={{ fontSize: 12, color: "var(--color-muted-foreground)" }}>{run.provider} - {meta.mode || "-"}</span>
           <span className={cliStatusClass[run.status]} style={{ marginLeft: "auto" }}>{statusLabel(t, run.status)}</span>
         </div>
       </div>
@@ -67,7 +67,7 @@ export function AuxPanel({ t, runDetail }: {
 }) {
   return (
     <aside style={{
-      width: 340, minWidth: 280, display: "flex", flexDirection: "column",
+      width: "100%", height: "100%", minWidth: 0, display: "flex", flexDirection: "column",
       background: "var(--color-card)", borderLeft: "1px solid var(--color-border)",
       flexShrink: 0, overflow: "hidden"
     }}>
