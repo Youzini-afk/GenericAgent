@@ -188,7 +188,8 @@ button:disabled {
 }
 
 .metric,
-.badge {
+.badge,
+.language-select {
   min-height: 24px;
   display: inline-flex;
   align-items: center;
@@ -199,6 +200,20 @@ button:disabled {
   background: #eef1f6;
   border: 1px solid #d9e0ea;
   border-radius: 6px;
+}
+
+.language-select select {
+  width: auto;
+  min-height: 0;
+  padding: 0 20px 0 0;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.language-select select:focus {
+  box-shadow: none;
 }
 
 .badge.ok {

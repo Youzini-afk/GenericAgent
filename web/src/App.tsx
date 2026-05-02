@@ -14,6 +14,7 @@ import {
   Globe2,
   HardDrive,
   KeyRound,
+  Languages,
   ListTree,
   Loader2,
   LogOut,
@@ -34,6 +35,8 @@ import { ApiError, api, login } from "./api";
 type PageKey = "chat" | "workers" | "queue" | "cliTools" | "agentRuns" | "config" | "schedules" | "memory" | "files" | "browser" | "logs";
 type Status = "pending" | "leased" | "running" | "succeeded" | "failed" | "canceled" | "interrupted";
 type CliRunStatus = "pending" | "preparing" | "running" | "succeeded" | "failed" | "canceled" | "interrupted";
+type Lang = "zh" | "en";
+type T = (key: I18nKey, vars?: Record<string, string | number>) => string;
 
 type Session = { id: string; title: string; updated_at: number; created_at: number };
 type Message = { id: string; session_id: string; role: string; content: string; task_id?: string; created_at: number };
@@ -101,18 +104,267 @@ type CliRun = {
 };
 type CliRunEvent = { seq: number; type: string; payload: Record<string, unknown>; created_at: number };
 
-const navItems: Array<{ key: PageKey; label: string; icon: ReactNode }> = [
-  { key: "chat", label: "Chat", icon: <MessageSquare size={17} /> },
-  { key: "workers", label: "Workers", icon: <Boxes size={17} /> },
-  { key: "queue", label: "Queue", icon: <ClipboardList size={17} /> },
-  { key: "cliTools", label: "CLI Tools", icon: <Code2 size={17} /> },
-  { key: "agentRuns", label: "Agent Runs", icon: <Activity size={17} /> },
-  { key: "config", label: "API 配置", icon: <Settings2 size={17} /> },
-  { key: "schedules", label: "Schedules", icon: <CalendarClock size={17} /> },
-  { key: "memory", label: "Memory", icon: <Database size={17} /> },
-  { key: "files", label: "Files", icon: <FolderOpen size={17} /> },
-  { key: "browser", label: "Browser", icon: <Globe2 size={17} /> },
-  { key: "logs", label: "Logs/System", icon: <ServerCog size={17} /> }
+const I18N = {
+  zh: {
+    "app.subtitle": "GenericAgent Web",
+    "nav.chat": "对话",
+    "nav.workers": "工作进程",
+    "nav.queue": "任务队列",
+    "nav.cliTools": "CLI 工具",
+    "nav.agentRuns": "子 Agent 运行",
+    "nav.config": "API 配置",
+    "nav.schedules": "定时任务",
+    "nav.memory": "记忆",
+    "nav.files": "文件",
+    "nav.browser": "浏览器",
+    "nav.logs": "日志/系统",
+    "auth.password": "管理密码",
+    "auth.login": "登录",
+    "common.refresh": "刷新",
+    "common.save": "保存",
+    "common.create": "新建",
+    "common.delete": "删除",
+    "common.cancel": "取消",
+    "common.open": "打开",
+    "common.run": "运行",
+    "common.execute": "执行",
+    "common.none": "无",
+    "common.idle": "空闲",
+    "common.filesCount": "{count} 个文件",
+    "common.logout": "退出",
+    "common.language": "语言",
+    "role.user": "用户",
+    "role.agent": "助手",
+    "status.pending": "排队中",
+    "status.leased": "已分配",
+    "status.preparing": "准备中",
+    "status.running": "运行中",
+    "status.succeeded": "成功",
+    "status.failed": "失败",
+    "status.canceled": "已取消",
+    "status.interrupted": "已中断",
+    "toolStatus.missing": "未安装",
+    "toolStatus.installing": "安装中",
+    "toolStatus.installed": "已安装",
+    "toolStatus.broken": "异常",
+    "chat.sessions": "会话",
+    "chat.newSession": "新建会话",
+    "chat.newSessionTitle": "新会话",
+    "chat.title": "对话",
+    "chat.activeTasks": "{count} 个任务在队列中",
+    "chat.task": "任务",
+    "chat.send": "发送",
+    "chat.cancelTask": "取消任务 {id}",
+    "workers.title": "工作进程",
+    "workers.ready": "就绪",
+    "workers.task": "任务",
+    "workers.lastError": "最近错误",
+    "workers.restart": "重启 worker",
+    "workers.noWorkers": "暂无 worker",
+    "workers.dead": "已停止",
+    "queue.active": "运行队列",
+    "queue.history": "历史记录",
+    "table.id": "ID",
+    "table.kind": "类型",
+    "table.session": "会话",
+    "table.status": "状态",
+    "table.worker": "工作进程",
+    "table.updated": "更新时间",
+    "table.provider": "Provider",
+    "table.mode": "模式",
+    "cliTools.title": "CLI 工具",
+    "cliTools.envProfiles": "环境变量配置",
+    "cliTools.package": "包",
+    "cliTools.version": "版本",
+    "cliTools.command": "命令",
+    "cliTools.error": "错误",
+    "cliTools.install": "安装",
+    "cliTools.test": "测试",
+    "cliTools.installing": "正在安装 {id}",
+    "cliTools.installed": "{id} 已安装",
+    "cliTools.profileName": "配置名称",
+    "agentRuns.create": "创建运行",
+    "agentRuns.noEnvProfile": "不使用环境变量配置",
+    "agentRuns.selectRun": "选择一个 run",
+    "agentRuns.workspace": "工作区",
+    "agentRuns.changed": "变更",
+    "agentRuns.error": "错误",
+    "agentRuns.cancel": "取消 run",
+    "policy.write_intent": "写入意图",
+    "policy.allow_write": "允许写入",
+    "policy.allow_tests": "允许测试",
+    "policy.allow_install": "允许安装",
+    "policy.allow_network": "允许联网",
+    "policy.allow_commit": "允许提交",
+    "policy.allow_push": "允许推送",
+    "config.path": "路径",
+    "config.configs": "配置数",
+    "config.saved": "已保存",
+    "schedules.reports": "执行报告",
+    "schedules.enabled": "启用",
+    "schedules.enqueue": "入队",
+    "schedules.next": "下次",
+    "memory.load": "读取",
+    "files.editor": "编辑器",
+    "root.workspace": "工作区",
+    "root.temp": "临时目录",
+    "root.memory": "记忆",
+    "browser.note": "云端 Chromium，与本机登录态隔离",
+    "browser.refreshTabs": "刷新标签页",
+    "browser.newTab": "新建标签页",
+    "browser.navigate": "导航",
+    "browser.screenshot": "截图",
+    "logs.system": "系统",
+    "logs.logs": "日志",
+    "logs.dataDir": "数据目录",
+    "logs.configured": "已配置",
+    "logs.concurrency": "Agent 并发",
+    "logs.cliRunners": "CLI 并发",
+    "logKind.server": "服务端",
+    "logKind.worker": "工作进程",
+    "logKind.scheduler": "调度器",
+    "logKind.agent": "Agent",
+    "logKind.browser": "浏览器",
+    "topbar.config": "配置"
+  },
+  en: {
+    "app.subtitle": "GenericAgent Web",
+    "nav.chat": "Chat",
+    "nav.workers": "Workers",
+    "nav.queue": "Queue",
+    "nav.cliTools": "CLI Tools",
+    "nav.agentRuns": "Agent Runs",
+    "nav.config": "API Config",
+    "nav.schedules": "Schedules",
+    "nav.memory": "Memory",
+    "nav.files": "Files",
+    "nav.browser": "Browser",
+    "nav.logs": "Logs/System",
+    "auth.password": "Admin password",
+    "auth.login": "Log in",
+    "common.refresh": "Refresh",
+    "common.save": "Save",
+    "common.create": "Create",
+    "common.delete": "Delete",
+    "common.cancel": "Cancel",
+    "common.open": "Open",
+    "common.run": "Run",
+    "common.execute": "Execute",
+    "common.none": "None",
+    "common.idle": "Idle",
+    "common.filesCount": "{count} files",
+    "common.logout": "Log out",
+    "common.language": "Language",
+    "role.user": "User",
+    "role.agent": "Agent",
+    "status.pending": "Pending",
+    "status.leased": "Leased",
+    "status.preparing": "Preparing",
+    "status.running": "Running",
+    "status.succeeded": "Succeeded",
+    "status.failed": "Failed",
+    "status.canceled": "Canceled",
+    "status.interrupted": "Interrupted",
+    "toolStatus.missing": "Missing",
+    "toolStatus.installing": "Installing",
+    "toolStatus.installed": "Installed",
+    "toolStatus.broken": "Broken",
+    "chat.sessions": "Sessions",
+    "chat.newSession": "New session",
+    "chat.newSessionTitle": "New session",
+    "chat.title": "Chat",
+    "chat.activeTasks": "{count} tasks queued",
+    "chat.task": "Task",
+    "chat.send": "Send",
+    "chat.cancelTask": "Cancel task {id}",
+    "workers.title": "Workers",
+    "workers.ready": "Ready",
+    "workers.task": "Task",
+    "workers.lastError": "Last error",
+    "workers.restart": "Restart worker",
+    "workers.noWorkers": "No workers",
+    "workers.dead": "Dead",
+    "queue.active": "Active Queue",
+    "queue.history": "History",
+    "table.id": "ID",
+    "table.kind": "Kind",
+    "table.session": "Session",
+    "table.status": "Status",
+    "table.worker": "Worker",
+    "table.updated": "Updated",
+    "table.provider": "Provider",
+    "table.mode": "Mode",
+    "cliTools.title": "CLI Tools",
+    "cliTools.envProfiles": "Env Profiles",
+    "cliTools.package": "Package",
+    "cliTools.version": "Version",
+    "cliTools.command": "Command",
+    "cliTools.error": "Error",
+    "cliTools.install": "Install",
+    "cliTools.test": "Test",
+    "cliTools.installing": "Installing {id}",
+    "cliTools.installed": "{id} installed",
+    "cliTools.profileName": "Profile name",
+    "agentRuns.create": "Create Run",
+    "agentRuns.noEnvProfile": "No env profile",
+    "agentRuns.selectRun": "Select a run",
+    "agentRuns.workspace": "Workspace",
+    "agentRuns.changed": "Changed",
+    "agentRuns.error": "Error",
+    "agentRuns.cancel": "Cancel run",
+    "policy.write_intent": "Write intent",
+    "policy.allow_write": "Allow write",
+    "policy.allow_tests": "Allow tests",
+    "policy.allow_install": "Allow install",
+    "policy.allow_network": "Allow network",
+    "policy.allow_commit": "Allow commit",
+    "policy.allow_push": "Allow push",
+    "config.path": "Path",
+    "config.configs": "Configs",
+    "config.saved": "Saved",
+    "schedules.reports": "Reports",
+    "schedules.enabled": "Enabled",
+    "schedules.enqueue": "Enqueue",
+    "schedules.next": "next",
+    "memory.load": "Load",
+    "files.editor": "Editor",
+    "root.workspace": "Workspace",
+    "root.temp": "Temp",
+    "root.memory": "Memory",
+    "browser.note": "Cloud Chromium, isolated from local browser sessions",
+    "browser.refreshTabs": "Refresh tabs",
+    "browser.newTab": "New tab",
+    "browser.navigate": "Navigate",
+    "browser.screenshot": "Screenshot",
+    "logs.system": "System",
+    "logs.logs": "Logs",
+    "logs.dataDir": "Data dir",
+    "logs.configured": "Configured",
+    "logs.concurrency": "Agent concurrency",
+    "logs.cliRunners": "CLI runners",
+    "logKind.server": "Server",
+    "logKind.worker": "Worker",
+    "logKind.scheduler": "Scheduler",
+    "logKind.agent": "Agent",
+    "logKind.browser": "Browser",
+    "topbar.config": "config"
+  }
+} as const;
+
+type I18nKey = keyof typeof I18N.zh;
+
+const navItems: Array<{ key: PageKey; labelKey: I18nKey; icon: ReactNode }> = [
+  { key: "chat", labelKey: "nav.chat", icon: <MessageSquare size={17} /> },
+  { key: "workers", labelKey: "nav.workers", icon: <Boxes size={17} /> },
+  { key: "queue", labelKey: "nav.queue", icon: <ClipboardList size={17} /> },
+  { key: "cliTools", labelKey: "nav.cliTools", icon: <Code2 size={17} /> },
+  { key: "agentRuns", labelKey: "nav.agentRuns", icon: <Activity size={17} /> },
+  { key: "config", labelKey: "nav.config", icon: <Settings2 size={17} /> },
+  { key: "schedules", labelKey: "nav.schedules", icon: <CalendarClock size={17} /> },
+  { key: "memory", labelKey: "nav.memory", icon: <Database size={17} /> },
+  { key: "files", labelKey: "nav.files", icon: <FolderOpen size={17} /> },
+  { key: "browser", labelKey: "nav.browser", icon: <Globe2 size={17} /> },
+  { key: "logs", labelKey: "nav.logs", icon: <ServerCog size={17} /> }
 ];
 
 const statusClass: Record<Status, string> = {
@@ -152,6 +404,37 @@ function asText(value: unknown) {
 function changedCount(result: Record<string, unknown>) {
   const files = result?.changed_files;
   return Array.isArray(files) ? files.length : 0;
+}
+
+function getInitialLang(): Lang {
+  const saved = localStorage.getItem("ga_lang");
+  if (saved === "zh" || saved === "en") return saved;
+  return "zh";
+}
+
+function makeT(lang: Lang): T {
+  return (key, vars) => {
+    let text: string = I18N[lang][key] || I18N.zh[key] || key;
+    for (const [name, value] of Object.entries(vars || {})) {
+      text = text.split(`{${name}}`).join(String(value));
+    }
+    return text;
+  };
+}
+
+function statusLabel(t: T, status: string) {
+  const key = `status.${status}` as I18nKey;
+  return key in I18N.zh ? t(key) : status;
+}
+
+function toolStatusLabel(t: T, status: string) {
+  const key = `toolStatus.${status}` as I18nKey;
+  return key in I18N.zh ? t(key) : status;
+}
+
+function policyLabel(t: T, key: string) {
+  const labelKey = `policy.${key}` as I18nKey;
+  return labelKey in I18N.zh ? t(labelKey) : key;
 }
 
 function IconButton({
@@ -212,7 +495,7 @@ function useAsyncData<T>(token: string, path: string, fallback: T, interval = 0)
   return { data, setData, error, refresh };
 }
 
-function Login({ onLogin }: { onLogin: (token: string) => void }) {
+function Login({ onLogin, t }: { onLogin: (token: string) => void; t: T }) {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -240,20 +523,20 @@ function Login({ onLogin }: { onLogin: (token: string) => void }) {
         </div>
         <h1>GenericAgent Web</h1>
         <label>
-          <span>管理密码</span>
+          <span>{t("auth.password")}</span>
           <input autoFocus type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
         </label>
         {error && <p className="error-text">{error}</p>}
         <button className="primary-btn" type="submit" disabled={busy || !password}>
           {busy ? <Loader2 className="spin" size={16} /> : <KeyRound size={16} />}
-          登录
+          {t("auth.login")}
         </button>
       </form>
     </main>
   );
 }
 
-function ChatPage({ token }: { token: string }) {
+function ChatPage({ token, t }: { token: string; t: T }) {
   const sessions = useAsyncData<Session[]>(token, "/api/sessions", [], 3000);
   const tasks = useAsyncData<Task[]>(token, "/api/tasks", [], 2000);
   const [active, setActive] = useState<string>("");
@@ -324,7 +607,7 @@ function ChatPage({ token }: { token: string }) {
   async function newSession() {
     const session = await api<Session>("/api/sessions", token, {
       method: "POST",
-      body: JSON.stringify({ title: "New session" })
+      body: JSON.stringify({ title: t("chat.newSessionTitle") })
     });
     setActive(session.id);
     await sessions.refresh();
@@ -363,8 +646,8 @@ function ChatPage({ token }: { token: string }) {
     <div className="chat-grid">
       <aside className="list-pane">
         <div className="pane-head">
-          <span>会话</span>
-          <IconButton title="新建会话" onClick={newSession}>
+          <span>{t("chat.sessions")}</span>
+          <IconButton title={t("chat.newSession")} onClick={newSession}>
             <Plus size={16} />
           </IconButton>
         </div>
@@ -380,13 +663,13 @@ function ChatPage({ token }: { token: string }) {
       <section className="chat-main">
         <div className="chat-head">
           <div>
-            <h2>{sessions.data.find((item) => item.id === active)?.title || "Chat"}</h2>
-            <span>{activeTasks.length ? `${activeTasks.length} 个任务在队列中` : "idle"}</span>
+            <h2>{sessions.data.find((item) => item.id === active)?.title || t("chat.title")}</h2>
+            <span>{activeTasks.length ? t("chat.activeTasks", { count: activeTasks.length }) : t("common.idle")}</span>
           </div>
           <div className="task-pills">
             {activeTasks.map((task) => (
               <button className={statusClass[task.status]} key={task.id} onClick={() => setWatchTask(task.id)}>
-                {shortId(task.id)} · {task.status}
+                {shortId(task.id)} · {statusLabel(t, task.status)}
               </button>
             ))}
           </div>
@@ -399,8 +682,8 @@ function ChatPage({ token }: { token: string }) {
                   <strong>{run.provider}</strong>
                   <span>{shortId(run.id)} · {run.workspace_mode || "-"}</span>
                 </div>
-                <span className={cliStatusClass[run.status]}>{run.status}</span>
-                <small>{changedCount(run.result) ? `${changedCount(run.result)} files` : fmtTime(run.updated_at)}</small>
+                <span className={cliStatusClass[run.status]}>{statusLabel(t, run.status)}</span>
+                <small>{changedCount(run.result) ? t("common.filesCount", { count: changedCount(run.result) }) : fmtTime(run.updated_at)}</small>
               </article>
             ))}
           </div>
@@ -409,13 +692,13 @@ function ChatPage({ token }: { token: string }) {
         <div className="messages">
           {messages.map((message) => (
             <article className={`message ${message.role === "user" ? "user" : "agent"}`} key={message.id}>
-              <div className="role">{message.role === "user" ? "User" : "Agent"}</div>
+              <div className="role">{message.role === "user" ? t("role.user") : t("role.agent")}</div>
               <pre>{message.content}</pre>
             </article>
           ))}
           {events.length > 0 && (
             <article className="message agent">
-              <div className="role">Task {shortId(watchTask)}</div>
+              <div className="role">{t("chat.task")} {shortId(watchTask)}</div>
               <pre>{events.map((event) => asText(event.payload.text || event.payload.error || event.type)).join("")}</pre>
             </article>
           )}
@@ -424,13 +707,13 @@ function ChatPage({ token }: { token: string }) {
           <textarea value={draft} onChange={(e) => setDraft(e.target.value)} />
           <div className="composer-actions">
             {activeTasks.map((task) => (
-              <IconButton key={task.id} title={`取消 ${shortId(task.id)}`} onClick={() => cancelTask(task.id)} danger>
+              <IconButton key={task.id} title={t("chat.cancelTask", { id: shortId(task.id) })} onClick={() => cancelTask(task.id)} danger>
                 <CircleStop size={16} />
               </IconButton>
             ))}
             <button className="primary-btn" type="submit" disabled={!active || !draft.trim()}>
               <Send size={16} />
-              发送
+              {t("chat.send")}
             </button>
           </div>
         </form>
@@ -439,7 +722,7 @@ function ChatPage({ token }: { token: string }) {
   );
 }
 
-function WorkersPage({ token }: { token: string }) {
+function WorkersPage({ token, t }: { token: string; t: T }) {
   const workers = useAsyncData<WorkerInfo[]>(token, "/api/workers", [], 2000);
   async function restart(workerId: string) {
     await api(`/api/workers/${workerId}/restart`, token, { method: "POST" });
@@ -447,10 +730,10 @@ function WorkersPage({ token }: { token: string }) {
   }
   return (
     <Section
-      title="Workers"
+      title={t("workers.title")}
       icon={<Boxes size={18} />}
       actions={
-        <IconButton title="刷新" onClick={workers.refresh}>
+        <IconButton title={t("common.refresh")} onClick={workers.refresh}>
           <RefreshCw size={16} />
         </IconButton>
       }
@@ -461,29 +744,29 @@ function WorkersPage({ token }: { token: string }) {
             <div className="card-row">
               <strong>{worker.id}</strong>
               <span className={worker.current_task_id ? "badge live" : worker.alive ? "badge ok" : "badge bad"}>
-                {worker.current_task_id ? "running" : worker.alive ? "idle" : "dead"}
+                {worker.current_task_id ? t("status.running") : worker.alive ? t("common.idle") : t("workers.dead")}
               </span>
             </div>
             <dl className="kv">
-              <dt>ready</dt>
+              <dt>{t("workers.ready")}</dt>
               <dd>{String(worker.ready)}</dd>
-              <dt>task</dt>
+              <dt>{t("workers.task")}</dt>
               <dd>{shortId(worker.current_task_id)}</dd>
-              <dt>last error</dt>
+              <dt>{t("workers.lastError")}</dt>
               <dd>{worker.last_error || "-"}</dd>
             </dl>
-            <IconButton title="重启 worker" onClick={() => restart(worker.id)}>
+            <IconButton title={t("workers.restart")} onClick={() => restart(worker.id)}>
               <RefreshCw size={16} />
             </IconButton>
           </article>
         ))}
-        {!workers.data.length && <div className="empty">No workers</div>}
+        {!workers.data.length && <div className="empty">{t("workers.noWorkers")}</div>}
       </div>
     </Section>
   );
 }
 
-function QueuePage({ token }: { token: string }) {
+function QueuePage({ token, t }: { token: string; t: T }) {
   const tasks = useAsyncData<Task[]>(token, "/api/tasks", [], 1800);
   const grouped = useMemo(
     () => ({
@@ -504,12 +787,12 @@ function QueuePage({ token }: { token: string }) {
         <table>
           <thead>
             <tr>
-              <th>ID</th>
-              <th>Kind</th>
-              <th>Session</th>
-              <th>Status</th>
-              <th>Worker</th>
-              <th>Updated</th>
+              <th>{t("table.id")}</th>
+              <th>{t("table.kind")}</th>
+              <th>{t("table.session")}</th>
+              <th>{t("table.status")}</th>
+              <th>{t("table.worker")}</th>
+              <th>{t("table.updated")}</th>
               <th />
             </tr>
           </thead>
@@ -520,13 +803,13 @@ function QueuePage({ token }: { token: string }) {
                 <td>{task.kind}</td>
                 <td>{shortId(task.session_id)}</td>
                 <td>
-                  <span className={statusClass[task.status]}>{task.status}</span>
+                  <span className={statusClass[task.status]}>{statusLabel(t, task.status)}</span>
                 </td>
                 <td>{task.leased_by || "-"}</td>
                 <td>{fmtTime(task.updated_at)}</td>
                 <td>
                   {["pending", "leased", "running"].includes(task.status) && (
-                    <IconButton title="取消任务" onClick={() => cancel(task.id)} danger>
+                    <IconButton title={t("common.cancel")} onClick={() => cancel(task.id)} danger>
                       <X size={15} />
                     </IconButton>
                   )}
@@ -541,15 +824,15 @@ function QueuePage({ token }: { token: string }) {
 
   return (
     <>
-      <Section title="Active Queue" icon={<Activity size={18} />} actions={<IconButton title="刷新" onClick={tasks.refresh}><RefreshCw size={16} /></IconButton>}>
+      <Section title={t("queue.active")} icon={<Activity size={18} />} actions={<IconButton title={t("common.refresh")} onClick={tasks.refresh}><RefreshCw size={16} /></IconButton>}>
         {table(grouped.active)}
       </Section>
-      <Section title="History" icon={<ListTree size={18} />}>{table(grouped.history)}</Section>
+      <Section title={t("queue.history")} icon={<ListTree size={18} />}>{table(grouped.history)}</Section>
     </>
   );
 }
 
-function CliToolsPage({ token }: { token: string }) {
+function CliToolsPage({ token, t }: { token: string; t: T }) {
   const tools = useAsyncData<{ items: CliTool[] }>(token, "/api/cli-tools", { items: [] }, 4000);
   const profiles = useAsyncData<{ items: CliEnvProfile[] }>(token, "/api/cli-env-profiles", { items: [] }, 4000);
   const [versions, setVersions] = useState<Record<string, string>>({});
@@ -558,12 +841,12 @@ function CliToolsPage({ token }: { token: string }) {
   const [notice, setNotice] = useState("");
 
   async function install(toolId: string) {
-    setNotice(`installing ${toolId}`);
+    setNotice(t("cliTools.installing", { id: toolId }));
     await api(`/api/cli-tools/${toolId}/install`, token, {
       method: "POST",
       body: JSON.stringify({ version: versions[toolId] || "latest" })
     });
-    setNotice(`installed ${toolId}`);
+    setNotice(t("cliTools.installed", { id: toolId }));
     await tools.refresh();
   }
 
@@ -587,12 +870,12 @@ function CliToolsPage({ token }: { token: string }) {
   return (
     <div className="two-column wide-left">
       <Section
-        title="CLI Tools"
+        title={t("cliTools.title")}
         icon={<Code2 size={18} />}
         actions={
           <>
             {notice && <span className="badge neutral">{notice}</span>}
-            <IconButton title="刷新" onClick={tools.refresh}>
+            <IconButton title={t("common.refresh")} onClick={tools.refresh}>
               <RefreshCw size={16} />
             </IconButton>
           </>
@@ -603,16 +886,16 @@ function CliToolsPage({ token }: { token: string }) {
             <article className="flat-card" key={tool.id}>
               <div className="card-row">
                 <strong>{tool.name}</strong>
-                <span className={tool.status === "installed" ? "badge ok" : tool.status === "broken" ? "badge bad" : "badge neutral"}>{tool.status}</span>
+                <span className={tool.status === "installed" ? "badge ok" : tool.status === "broken" ? "badge bad" : "badge neutral"}>{toolStatusLabel(t, tool.status)}</span>
               </div>
               <dl className="kv">
-                <dt>package</dt>
+                <dt>{t("cliTools.package")}</dt>
                 <dd>{tool.package || "-"}</dd>
-                <dt>version</dt>
+                <dt>{t("cliTools.version")}</dt>
                 <dd>{tool.resolved_version || tool.requested_version || "-"}</dd>
-                <dt>command</dt>
+                <dt>{t("cliTools.command")}</dt>
                 <dd>{tool.command_path || tool.command || "-"}</dd>
-                <dt>error</dt>
+                <dt>{t("cliTools.error")}</dt>
                 <dd>{tool.error || "-"}</dd>
               </dl>
               <div className="pathbar compact">
@@ -620,10 +903,10 @@ function CliToolsPage({ token }: { token: string }) {
                   value={versions[tool.id] || "latest"}
                   onChange={(e) => setVersions({ ...versions, [tool.id]: e.target.value })}
                 />
-                <IconButton title="安装" onClick={() => install(tool.id)} disabled={tool.install_kind === "custom"}>
+                <IconButton title={t("cliTools.install")} onClick={() => install(tool.id)} disabled={tool.install_kind === "custom"}>
                   <HardDrive size={16} />
                 </IconButton>
-                <IconButton title="测试" onClick={() => test(tool.id)}>
+                <IconButton title={t("cliTools.test")} onClick={() => test(tool.id)}>
                   <Play size={16} />
                 </IconButton>
               </div>
@@ -631,9 +914,9 @@ function CliToolsPage({ token }: { token: string }) {
           ))}
         </div>
       </Section>
-      <Section title="Env Profiles" icon={<KeyRound size={18} />} actions={<IconButton title="刷新" onClick={profiles.refresh}><RefreshCw size={16} /></IconButton>}>
+      <Section title={t("cliTools.envProfiles")} icon={<KeyRound size={18} />} actions={<IconButton title={t("common.refresh")} onClick={profiles.refresh}><RefreshCw size={16} /></IconButton>}>
         <form className="inline-form" onSubmit={saveProfile}>
-          <input placeholder="profile name" value={profile.name} onChange={(e) => setProfile({ ...profile, name: e.target.value })} />
+          <input placeholder={t("cliTools.profileName")} value={profile.name} onChange={(e) => setProfile({ ...profile, name: e.target.value })} />
           <select value={profile.tool_id} onChange={(e) => setProfile({ ...profile, tool_id: e.target.value })}>
             {tools.data.items.map((tool) => (
               <option value={tool.id} key={tool.id}>{tool.name}</option>
@@ -642,7 +925,7 @@ function CliToolsPage({ token }: { token: string }) {
           <textarea className="code-editor small" value={envText} onChange={(e) => setEnvText(e.target.value)} />
           <button className="primary-btn" type="submit">
             <Save size={16} />
-            保存
+            {t("common.save")}
           </button>
         </form>
         <div className="row-list">
@@ -661,7 +944,7 @@ function CliToolsPage({ token }: { token: string }) {
   );
 }
 
-function AgentRunsPage({ token }: { token: string }) {
+function AgentRunsPage({ token, t }: { token: string; t: T }) {
   const runs = useAsyncData<{ items: CliRun[] }>(token, "/api/cli-runs", { items: [] }, 2500);
   const profiles = useAsyncData<{ items: CliEnvProfile[] }>(token, "/api/cli-env-profiles", { items: [] }, 5000);
   const [form, setForm] = useState({
@@ -735,7 +1018,7 @@ function AgentRunsPage({ token }: { token: string }) {
 
   return (
     <div className="two-column wide-left">
-      <Section title="Create Run" icon={<Code2 size={18} />} actions={<IconButton title="刷新" onClick={runs.refresh}><RefreshCw size={16} /></IconButton>}>
+      <Section title={t("agentRuns.create")} icon={<Code2 size={18} />} actions={<IconButton title={t("common.refresh")} onClick={runs.refresh}><RefreshCw size={16} /></IconButton>}>
         <form className="inline-form run-form" onSubmit={createRun}>
           <select value={form.provider} onChange={(e) => setForm({ ...form, provider: e.target.value })}>
             <option value="codex">Codex</option>
@@ -745,7 +1028,7 @@ function AgentRunsPage({ token }: { token: string }) {
           </select>
           <input value={form.target_workspace} onChange={(e) => setForm({ ...form, target_workspace: e.target.value })} />
           <select value={form.env_profile_id} onChange={(e) => setForm({ ...form, env_profile_id: e.target.value })}>
-            <option value="">no env profile</option>
+            <option value="">{t("agentRuns.noEnvProfile")}</option>
             {profiles.data.items.map((item) => (
               <option value={item.id} key={item.id}>{item.name}</option>
             ))}
@@ -755,24 +1038,24 @@ function AgentRunsPage({ token }: { token: string }) {
             {(["write_intent", "allow_write", "allow_tests", "allow_install", "allow_network", "allow_commit", "allow_push"] as const).map((key) => (
               <label className="checkline" key={key}>
                 <input type="checkbox" checked={Boolean(form[key])} onChange={(e) => setForm({ ...form, [key]: e.target.checked })} />
-                {key}
+                {policyLabel(t, key)}
               </label>
             ))}
           </div>
           <button className="primary-btn" type="submit" disabled={!form.prompt.trim()}>
             <Play size={16} />
-            Run
+            {t("common.run")}
           </button>
         </form>
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
-                <th>ID</th>
-                <th>Provider</th>
-                <th>Status</th>
-                <th>Mode</th>
-                <th>Updated</th>
+                <th>{t("table.id")}</th>
+                <th>{t("table.provider")}</th>
+                <th>{t("table.status")}</th>
+                <th>{t("table.mode")}</th>
+                <th>{t("table.updated")}</th>
                 <th />
               </tr>
             </thead>
@@ -781,12 +1064,12 @@ function AgentRunsPage({ token }: { token: string }) {
                 <tr key={run.id} className={selected === run.id ? "selected-row" : ""}>
                   <td><button className="link-btn" type="button" onClick={() => setSelected(run.id)}>{shortId(run.id)}</button></td>
                   <td>{run.provider}</td>
-                  <td><span className={cliStatusClass[run.status]}>{run.status}</span></td>
+                  <td><span className={cliStatusClass[run.status]}>{statusLabel(t, run.status)}</span></td>
                   <td>{run.workspace_mode || "-"}</td>
                   <td>{fmtTime(run.updated_at)}</td>
                   <td>
                     {["pending", "preparing", "running"].includes(run.status) && (
-                      <IconButton title="取消 run" onClick={() => cancel(run.id)} danger>
+                      <IconButton title={t("agentRuns.cancel")} onClick={() => cancel(run.id)} danger>
                         <CircleStop size={15} />
                       </IconButton>
                     )}
@@ -798,18 +1081,18 @@ function AgentRunsPage({ token }: { token: string }) {
         </div>
       </Section>
       <Section
-        title={`Run ${shortId(selected)}`}
+        title={`${t("common.run")} ${shortId(selected)}`}
         icon={<ClipboardList size={18} />}
-        actions={selectedRun && <span className={cliStatusClass[selectedRun.status]}>{selectedRun.status}</span>}
+        actions={selectedRun && <span className={cliStatusClass[selectedRun.status]}>{statusLabel(t, selectedRun.status)}</span>}
       >
         {selectedRun ? (
           <div className="run-detail">
             <dl className="kv">
-              <dt>workspace</dt>
+              <dt>{t("agentRuns.workspace")}</dt>
               <dd>{selectedRun.effective_workspace || selectedRun.target_workspace}</dd>
-              <dt>changed</dt>
-              <dd>{changedCount(result)} files</dd>
-              <dt>error</dt>
+              <dt>{t("agentRuns.changed")}</dt>
+              <dd>{t("common.filesCount", { count: changedCount(result) })}</dd>
+              <dt>{t("agentRuns.error")}</dt>
               <dd>{selectedRun.error || "-"}</dd>
             </dl>
             <pre className="log-box">{events.map((event) => `[${event.type}] ${asText(event.payload.text || event.payload.status || event.payload.error)}\n`).join("")}</pre>
@@ -817,14 +1100,14 @@ function AgentRunsPage({ token }: { token: string }) {
             <pre className="log-box tall">{diff}</pre>
           </div>
         ) : (
-          <div className="empty">Select a run</div>
+          <div className="empty">{t("agentRuns.selectRun")}</div>
         )}
       </Section>
     </div>
   );
 }
 
-function ConfigPage({ token }: { token: string }) {
+function ConfigPage({ token, t }: { token: string; t: T }) {
   const config = useAsyncData<LlmConfig>(token, "/api/config/llm", { configs: [], extras: {}, path: "" });
   const [draft, setDraft] = useState("");
   const [notice, setNotice] = useState("");
@@ -840,20 +1123,20 @@ function ConfigPage({ token }: { token: string }) {
       body: JSON.stringify({ configs, extras: config.data.extras || {} })
     });
     await api("/api/runtime/reload", token, { method: "POST" });
-    setNotice("saved");
+    setNotice(t("config.saved"));
     await config.refresh();
   }
 
   return (
     <Section
-      title="API 配置"
+      title={t("nav.config")}
       icon={<Settings2 size={18} />}
       actions={
         <>
           {notice && <span className="badge ok">{notice}</span>}
           <button className="primary-btn" type="button" onClick={save}>
             <Save size={16} />
-            保存
+            {t("common.save")}
           </button>
         </>
       }
@@ -861,9 +1144,9 @@ function ConfigPage({ token }: { token: string }) {
       <div className="split">
         <div className="flat-card">
           <dl className="kv">
-            <dt>path</dt>
+            <dt>{t("config.path")}</dt>
             <dd>{config.data.path || "-"}</dd>
-            <dt>configs</dt>
+            <dt>{t("config.configs")}</dt>
             <dd>{config.data.configs.length}</dd>
           </dl>
           {config.data.configs.map((item) => (
@@ -880,7 +1163,7 @@ function ConfigPage({ token }: { token: string }) {
   );
 }
 
-function SchedulesPage({ token }: { token: string }) {
+function SchedulesPage({ token, t }: { token: string; t: T }) {
   const schedules = useAsyncData<{ items: Schedule[] }>(token, "/api/schedules", { items: [] }, 3000);
   const reports = useAsyncData<{ items: Array<Record<string, unknown>> }>(token, "/api/schedules/reports", { items: [] }, 3000);
   const [form, setForm] = useState({ title: "", prompt: "", cron: "@every 1h", enabled: true });
@@ -904,18 +1187,18 @@ function SchedulesPage({ token }: { token: string }) {
 
   return (
     <div className="two-column">
-      <Section title="Schedules" icon={<CalendarClock size={18} />}>
+      <Section title={t("nav.schedules")} icon={<CalendarClock size={18} />}>
         <form className="inline-form" onSubmit={create}>
           <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
           <input value={form.cron} onChange={(e) => setForm({ ...form, cron: e.target.value })} />
           <textarea value={form.prompt} onChange={(e) => setForm({ ...form, prompt: e.target.value })} />
           <label className="checkline">
             <input type="checkbox" checked={form.enabled} onChange={(e) => setForm({ ...form, enabled: e.target.checked })} />
-            enabled
+            {t("schedules.enabled")}
           </label>
           <button className="primary-btn" type="submit">
             <Plus size={16} />
-            新建
+            {t("common.create")}
           </button>
         </form>
         <div className="row-list">
@@ -923,26 +1206,26 @@ function SchedulesPage({ token }: { token: string }) {
             <div className="row-item" key={item.id}>
               <div>
                 <strong>{item.title}</strong>
-                <span>{item.cron} · next {fmtTime(item.next_run_at)}</span>
+                <span>{item.cron} · {t("schedules.next")} {fmtTime(item.next_run_at)}</span>
               </div>
-              <IconButton title="入队" onClick={() => enqueue(item.id)}>
+              <IconButton title={t("schedules.enqueue")} onClick={() => enqueue(item.id)}>
                 <Play size={15} />
               </IconButton>
-              <IconButton title="删除" onClick={() => remove(item.id)} danger>
+              <IconButton title={t("common.delete")} onClick={() => remove(item.id)} danger>
                 <Trash2 size={15} />
               </IconButton>
             </div>
           ))}
         </div>
       </Section>
-      <Section title="Reports" icon={<ClipboardList size={18} />}>
+      <Section title={t("schedules.reports")} icon={<ClipboardList size={18} />}>
         <pre className="log-box">{JSON.stringify(reports.data.items, null, 2)}</pre>
       </Section>
     </div>
   );
 }
 
-function MemoryPage({ token }: { token: string }) {
+function MemoryPage({ token, t }: { token: string; t: T }) {
   const [path, setPath] = useState("global_mem_insight.txt");
   const [content, setContent] = useState("");
   const [notice, setNotice] = useState("");
@@ -957,14 +1240,14 @@ function MemoryPage({ token }: { token: string }) {
       method: "PUT",
       body: JSON.stringify({ content })
     });
-    setNotice("saved");
+    setNotice(t("config.saved"));
   }
 
   return (
-    <Section title="Memory" icon={<Database size={18} />} actions={<button className="primary-btn" type="button" onClick={save}><Save size={16} />保存</button>}>
+    <Section title={t("nav.memory")} icon={<Database size={18} />} actions={<button className="primary-btn" type="button" onClick={save}><Save size={16} />{t("common.save")}</button>}>
       <div className="pathbar">
         <input value={path} onChange={(e) => setPath(e.target.value)} />
-        <IconButton title="读取" onClick={load}>
+        <IconButton title={t("memory.load")} onClick={load}>
           <RefreshCw size={16} />
         </IconButton>
         {notice && <span className="badge ok">{notice}</span>}
@@ -974,7 +1257,7 @@ function MemoryPage({ token }: { token: string }) {
   );
 }
 
-function FilesPage({ token }: { token: string }) {
+function FilesPage({ token, t }: { token: string; t: T }) {
   const [root, setRoot] = useState("workspace");
   const [path, setPath] = useState("");
   const [items, setItems] = useState<FileItem[]>([]);
@@ -997,15 +1280,15 @@ function FilesPage({ token }: { token: string }) {
 
   return (
     <div className="two-column wide-left">
-      <Section title="Files" icon={<FolderOpen size={18} />}>
+      <Section title={t("nav.files")} icon={<FolderOpen size={18} />}>
         <div className="pathbar">
           <select value={root} onChange={(e) => setRoot(e.target.value)}>
-            <option value="workspace">workspace</option>
-            <option value="temp">temp</option>
-            <option value="memory">memory</option>
+            <option value="workspace">{t("root.workspace")}</option>
+            <option value="temp">{t("root.temp")}</option>
+            <option value="memory">{t("root.memory")}</option>
           </select>
           <input value={path} onChange={(e) => setPath(e.target.value)} />
-          <IconButton title="打开" onClick={() => browse(path)}>
+          <IconButton title={t("common.open")} onClick={() => browse(path)}>
             <ChevronRight size={16} />
           </IconButton>
         </div>
@@ -1019,14 +1302,14 @@ function FilesPage({ token }: { token: string }) {
           ))}
         </div>
       </Section>
-      <Section title="Editor" icon={<Code2 size={18} />} actions={<button className="primary-btn" type="button" onClick={save}><Save size={16} />保存</button>}>
+      <Section title={t("files.editor")} icon={<Code2 size={18} />} actions={<button className="primary-btn" type="button" onClick={save}><Save size={16} />{t("common.save")}</button>}>
         <textarea className="large-editor" value={content} onChange={(e) => setContent(e.target.value)} />
       </Section>
     </div>
   );
 }
 
-function BrowserPage({ token }: { token: string }) {
+function BrowserPage({ token, t }: { token: string; t: T }) {
   const [workerId, setWorkerId] = useState("worker-1");
   const [tabs, setTabs] = useState<BrowserTab[]>([]);
   const [activeTab, setActiveTab] = useState("p1");
@@ -1070,20 +1353,20 @@ function BrowserPage({ token }: { token: string }) {
 
   return (
     <div className="two-column">
-      <Section title="Browser" icon={<Globe2 size={18} />}>
-        <div className="cloud-note">云端 Chromium · 隔离本机登录态</div>
+      <Section title={t("nav.browser")} icon={<Globe2 size={18} />}>
+        <div className="cloud-note">{t("browser.note")}</div>
         <div className="pathbar">
           <input value={workerId} onChange={(e) => setWorkerId(e.target.value)} />
-          <IconButton title="刷新 tabs" onClick={loadTabs}>
+          <IconButton title={t("browser.refreshTabs")} onClick={loadTabs}>
             <RefreshCw size={16} />
           </IconButton>
         </div>
         <div className="pathbar">
           <input value={url} onChange={(e) => setUrl(e.target.value)} />
-          <IconButton title="新建 tab" onClick={newTab}>
+          <IconButton title={t("browser.newTab")} onClick={newTab}>
             <Plus size={16} />
           </IconButton>
-          <IconButton title="导航" onClick={navigate}>
+          <IconButton title={t("browser.navigate")} onClick={navigate}>
             <Play size={16} />
           </IconButton>
         </div>
@@ -1097,16 +1380,16 @@ function BrowserPage({ token }: { token: string }) {
         </div>
       </Section>
       <Section
-        title="Execute"
+        title={t("common.execute")}
         icon={<Code2 size={18} />}
         actions={
           <>
-            <IconButton title="截图" onClick={capture}>
+            <IconButton title={t("browser.screenshot")} onClick={capture}>
               <HardDrive size={16} />
             </IconButton>
             <button className="primary-btn" type="button" onClick={execute}>
               <Play size={16} />
-              执行
+              {t("common.execute")}
             </button>
           </>
         }
@@ -1119,7 +1402,7 @@ function BrowserPage({ token }: { token: string }) {
   );
 }
 
-function LogsPage({ token, status }: { token: string; status?: StatusInfo }) {
+function LogsPage({ token, status, t }: { token: string; status?: StatusInfo; t: T }) {
   const [kind, setKind] = useState("server");
   const [content, setContent] = useState("");
 
@@ -1134,26 +1417,26 @@ function LogsPage({ token, status }: { token: string; status?: StatusInfo }) {
 
   return (
     <div className="two-column">
-      <Section title="System" icon={<ServerCog size={18} />}>
+      <Section title={t("logs.system")} icon={<ServerCog size={18} />}>
         <dl className="kv">
-          <dt>data dir</dt>
+          <dt>{t("logs.dataDir")}</dt>
           <dd>{status?.data_dir || "-"}</dd>
-          <dt>configured</dt>
+          <dt>{t("logs.configured")}</dt>
           <dd>{String(status?.configured ?? false)}</dd>
-          <dt>concurrency</dt>
+          <dt>{t("logs.concurrency")}</dt>
           <dd>{status?.worker_concurrency ?? "-"}</dd>
-          <dt>cli runners</dt>
+          <dt>{t("logs.cliRunners")}</dt>
           <dd>{status?.cli_runner_concurrency ?? "-"}</dd>
         </dl>
       </Section>
-      <Section title="Logs" icon={<FileText size={18} />} actions={<IconButton title="刷新" onClick={load}><RefreshCw size={16} /></IconButton>}>
+      <Section title={t("logs.logs")} icon={<FileText size={18} />} actions={<IconButton title={t("common.refresh")} onClick={load}><RefreshCw size={16} /></IconButton>}>
         <div className="pathbar">
           <select value={kind} onChange={(e) => setKind(e.target.value)}>
-            <option value="server">server</option>
-            <option value="worker">worker</option>
-            <option value="scheduler">scheduler</option>
-            <option value="agent">agent</option>
-            <option value="browser">browser</option>
+            <option value="server">{t("logKind.server")}</option>
+            <option value="worker">{t("logKind.worker")}</option>
+            <option value="scheduler">{t("logKind.scheduler")}</option>
+            <option value="agent">{t("logKind.agent")}</option>
+            <option value="browser">{t("logKind.browser")}</option>
           </select>
         </div>
         <pre className="log-box tall">{content}</pre>
@@ -1162,7 +1445,19 @@ function LogsPage({ token, status }: { token: string; status?: StatusInfo }) {
   );
 }
 
-function AppShell({ token, setToken }: { token: string; setToken: (token: string) => void }) {
+function AppShell({
+  token,
+  setToken,
+  lang,
+  setLang,
+  t
+}: {
+  token: string;
+  setToken: (token: string) => void;
+  lang: Lang;
+  setLang: (lang: Lang) => void;
+  t: T;
+}) {
   const [page, setPage] = useState<PageKey>("chat");
   const status = useAsyncData<StatusInfo | undefined>(token, "/api/status", undefined, 5000);
   const workers = useAsyncData<WorkerInfo[]>(token, "/api/workers", [], 5000);
@@ -1175,17 +1470,17 @@ function AppShell({ token, setToken }: { token: string; setToken: (token: string
   }
 
   const content = {
-    chat: <ChatPage token={token} />,
-    workers: <WorkersPage token={token} />,
-    queue: <QueuePage token={token} />,
-    cliTools: <CliToolsPage token={token} />,
-    agentRuns: <AgentRunsPage token={token} />,
-    config: <ConfigPage token={token} />,
-    schedules: <SchedulesPage token={token} />,
-    memory: <MemoryPage token={token} />,
-    files: <FilesPage token={token} />,
-    browser: <BrowserPage token={token} />,
-    logs: <LogsPage token={token} status={status.data} />
+    chat: <ChatPage token={token} t={t} />,
+    workers: <WorkersPage token={token} t={t} />,
+    queue: <QueuePage token={token} t={t} />,
+    cliTools: <CliToolsPage token={token} t={t} />,
+    agentRuns: <AgentRunsPage token={token} t={t} />,
+    config: <ConfigPage token={token} t={t} />,
+    schedules: <SchedulesPage token={token} t={t} />,
+    memory: <MemoryPage token={token} t={t} />,
+    files: <FilesPage token={token} t={t} />,
+    browser: <BrowserPage token={token} t={t} />,
+    logs: <LogsPage token={token} status={status.data} t={t} />
   }[page];
 
   return (
@@ -1199,22 +1494,29 @@ function AppShell({ token, setToken }: { token: string; setToken: (token: string
           {navItems.map((item) => (
             <button className={page === item.key ? "active" : ""} key={item.key} onClick={() => setPage(item.key)}>
               {item.icon}
-              <span>{item.label}</span>
+              <span>{t(item.labelKey)}</span>
             </button>
           ))}
         </nav>
         <button className="logout-btn" type="button" onClick={logout}>
           <LogOut size={16} />
-          退出
+          {t("common.logout")}
         </button>
       </aside>
       <main className="main">
         <header className="topbar">
           <div className="topbar-title">
-            <h1>{navItems.find((item) => item.key === page)?.label}</h1>
-            <span>{status.data?.data_dir || "GenericAgent Web"}</span>
+            <h1>{t(navItems.find((item) => item.key === page)?.labelKey || "nav.chat")}</h1>
+            <span>{status.data?.data_dir || t("app.subtitle")}</span>
           </div>
           <div className="metrics">
+            <label className="language-select" title={t("common.language")}>
+              <Languages size={15} />
+              <select value={lang} onChange={(event) => setLang(event.target.value as Lang)}>
+                <option value="zh">中文</option>
+                <option value="en">English</option>
+              </select>
+            </label>
             <span className="metric">
               <ServerCog size={15} />
               {workers.data.filter((worker) => worker.alive).length}/{workers.data.length || status.data?.worker_concurrency || 0}
@@ -1225,7 +1527,7 @@ function AppShell({ token, setToken }: { token: string; setToken: (token: string
             </span>
             <span className={status.data?.configured ? "badge ok" : "badge warn"}>
               {status.data?.configured ? <Check size={13} /> : <X size={13} />}
-              config
+              {t("topbar.config")}
             </span>
           </div>
         </header>
@@ -1240,6 +1542,13 @@ function AppShell({ token, setToken }: { token: string; setToken: (token: string
 
 export default function App() {
   const [token, setToken] = useState(() => localStorage.getItem("ga_token") || "");
+  const [lang, setLangState] = useState<Lang>(getInitialLang);
+  const t = useMemo(() => makeT(lang), [lang]);
+
+  function setLang(lang: Lang) {
+    localStorage.setItem("ga_lang", lang);
+    setLangState(lang);
+  }
 
   useEffect(() => {
     if (!token) return;
@@ -1251,5 +1560,5 @@ export default function App() {
     });
   }, [token]);
 
-  return token ? <AppShell token={token} setToken={setToken} /> : <Login onLogin={setToken} />;
+  return token ? <AppShell token={token} setToken={setToken} lang={lang} setLang={setLang} t={t} /> : <Login onLogin={setToken} t={t} />;
 }
