@@ -5,6 +5,8 @@ import type { T } from "../lib/i18n";
 import { shortId, asText, changedCount, blockersCount, orchestrationMeta, statusLabel, statusClass, cliStatusClass } from "../lib/utils";
 import { useAsyncData } from "../hooks";
 import { IconButton } from "../components/ui/primitives";
+import { StatusIcon } from "../components/common/StatusIcon";
+import { Shimmer } from "../components/common/Shimmer";
 import { api } from "../api";
 
 export function ChatPage({ token, t, onOpenRun }: { token: string; t: T; onOpenRun: (runId: string) => void }) {
@@ -121,20 +123,37 @@ export function ChatPage({ token, t, onOpenRun }: { token: string; t: T; onOpenR
           </div>
         </div>
         {childRuns.length > 0 && (
-          <div className="child-run-strip">
-            {childRuns.slice(0, 6).map((run) => (
-              <article className="child-run-card" key={run.id}>
-                <div className="child-run-main">
-                  <strong>{run.provider} · {orchestrationMeta(run).mode || "-"}</strong>
-                  <span>{shortId(run.id)} · {run.workspace_mode || "-"} · {t("common.filesCount", { count: changedCount(run.result) })}</span>
-                  {orchestrationMeta(run).providerReason && <small>{orchestrationMeta(run).providerReason}</small>}
-                </div>
-                <span className={cliStatusClass[run.status]}>{statusLabel(t, run.status)}</span>
-                <button className="link-btn" type="button" title={t("chat.viewRun", { id: shortId(run.id) })} onClick={() => onOpenRun(run.id)}>
-                  {t("common.viewResult")} · {t("agentRuns.blockers")} {blockersCount(run.result)}
-                </button>
-              </article>
-            ))}
+          <div style={{ borderBottom: "1px solid var(--color-border)", padding: "8px 16px", background: "var(--color-muted)" }}>
+            <div style={{ borderLeft: "2px solid var(--color-border)", marginLeft: 4, paddingLeft: 12, display: "flex", flexDirection: "column", gap: 4 }}>
+              {childRuns.slice(0, 6).map((run) => {
+                const meta = orchestrationMeta(run);
+                const isRunning = run.status === "running";
+                return (
+                  <button
+                    key={run.id}
+                    type="button"
+                    onClick={() => onOpenRun(run.id)}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 8, padding: "4px 8px",
+                      background: "transparent", border: 0, borderRadius: 6, cursor: "pointer",
+                      textAlign: "left", color: "var(--color-foreground)"
+                    }}
+                  >
+                    <span style={{ color: isRunning ? "oklch(0.75 0.15 60)" : run.status === "succeeded" ? "oklch(0.7 0.15 145)" : run.status === "failed" ? "var(--color-destructive)" : "var(--color-muted-foreground)", flexShrink: 0 }}>
+                      <StatusIcon status={run.status} size={10} />
+                    </span>
+                    <span style={{ fontSize: 12, color: "var(--color-muted-foreground)" }}>{run.provider}</span>
+                    {meta.mode && <span style={{ fontSize: 12, color: "var(--color-muted-foreground)" }}>· {meta.mode}</span>}
+                    <span style={{ fontSize: 12 }}>
+                      {isRunning ? <Shimmer>{statusLabel(t, run.status)}</Shimmer> : statusLabel(t, run.status)}
+                    </span>
+                    <span style={{ fontSize: 11, color: "var(--color-muted-foreground)", marginLeft: "auto" }}>
+                      {t("common.filesCount", { count: changedCount(run.result) })} · {t("agentRuns.blockers")} {blockersCount(run.result)}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
         {error && <div className="inline-error">{error}</div>}
