@@ -1028,3 +1028,76 @@ strong { color: var(--color-foreground); }
     flex: 0 0 auto;
   }
 }
+
+/* ── ConfigPage ───────────────────────────────────────── */
+.cfg-layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  height: 100%; min-height: 0; overflow: hidden;
+}
+
+.cfg-list-pane {
+  display: flex; flex-direction: column;
+  border-right: 1px solid var(--color-border);
+  background: var(--color-sidebar); overflow: hidden;
+}
+
+.cfg-list-header {
+  height: 44px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 10px; border-bottom: 1px solid var(--color-border);
+}
+
+.cfg-list-title { font-size: 12px; font-weight: 600; color: var(--color-muted-foreground); text-transform: uppercase; letter-spacing: 0.05em; }
+
+.cfg-list { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 4px; }
+
+.cfg-list-footer { flex-shrink: 0; padding: 6px 10px; border-top: 1px solid var(--color-border); }
+
+.cfg-card {
+  width: 100%; display: flex; flex-direction: column; gap: 3px;
+  padding: 10px 12px; border: 1px solid var(--color-border); border-radius: 8px;
+  background: var(--color-card); cursor: pointer; text-align: left;
+  transition: background 100ms, border-color 100ms;
+}
+.cfg-card:hover { background: var(--color-accent); }
+.cfg-card[data-active="true"] { background: oklch(0.985 0 0 / 6%); border-color: oklch(0.985 0 0 / 20%); }
+
+.cfg-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.cfg-card-var { font-size: 13px; font-weight: 600; color: var(--color-foreground); font-family: monospace; }
+.cfg-card-kind { font-size: 11px; font-weight: 500; }
+.cfg-card-model { font-size: 12px; color: var(--color-muted-foreground); }
+.cfg-card-base { font-size: 11px; color: var(--color-muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cfg-card-actions { display: flex; align-items: center; margin-top: 4px; }
+
+.cfg-panel {
+  display: flex; flex-direction: column;
+  height: 100%; min-height: 0; overflow: hidden;
+}
+
+.cfg-panel-header {
+  height: 44px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 16px; border-bottom: 1px solid var(--color-border);
+  background: var(--color-card);
+}
+.cfg-panel-title { font-size: 14px; font-weight: 600; font-family: monospace; }
+
+.cfg-panel-body { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+
+.cfg-panel-footer { flex-shrink: 0; display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--color-border); background: var(--color-card); }
+
+.cfg-field { display: flex; flex-direction: column; gap: 5px; }
+.cfg-field span { font-size: 12px; color: var(--color-muted-foreground); font-weight: 500; }
+
+.cfg-toggle-raw { align-self: flex-start; padding: 0; font-size: 12px; color: var(--color-primary); background: transparent; border: 0; cursor: pointer; }
+
+.cfg-preset-row {
+  width: 100%; display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 12px; border: 1px solid var(--color-border); border-radius: 8px;
+  background: var(--color-card); cursor: pointer; text-align: left;
+  transition: background 100ms;
+}
+.cfg-preset-row:hover { background: var(--color-accent); }
+.cfg-preset-label { font-size: 13px; font-weight: 500; color: var(--color-foreground); }
+.cfg-preset-kind { font-size: 11px; font-weight: 500; }
