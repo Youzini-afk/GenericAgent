@@ -9,16 +9,9 @@ import { useAsyncData } from "./hooks";
 import { useCliRunStream } from "./useCliRunStream";
 import { AppShell } from "./components/layout/AppShell";
 import { ChatPage } from "./pages/ChatPage";
-import { WorkersPage } from "./pages/WorkersPage";
-import { QueuePage } from "./pages/QueuePage";
-import { CliToolsPage } from "./pages/CliToolsPage";
 import { AgentRunsPage } from "./pages/AgentRunsPage";
-import { ConfigPage } from "./pages/ConfigPage";
-import { SchedulesPage } from "./pages/SchedulesPage";
-import { MemoryPage } from "./pages/MemoryPage";
-import { FilesPage } from "./pages/FilesPage";
-import { BrowserPage } from "./pages/BrowserPage";
-import { LogsPage } from "./pages/LogsPage";
+import { QueuePage } from "./pages/QueuePage";
+import { SettingsPage } from "./pages/SettingsPage";
 
 const FINAL_CLI_RUN_EVENTS = ["done", "error", "canceled"];
 
@@ -61,15 +54,14 @@ function Login({ onLogin, t }: { onLogin: (token: string) => void; t: T }) {
   );
 }
 
-function RunDetailLoader({ runId, token, t, children }: {
-  runId: string; token: string; t: T;
+function RunDetailLoader({ runId, token, children }: {
+  runId: string; token: string;
   children: (detail: { run: CliRun; events: CliRunEvent[]; diff: string; result: Record<string, unknown> } | undefined) => React.ReactNode;
 }) {
   const [run, setRun] = useState<CliRun | undefined>();
   const [diff, setDiff] = useState("");
   const [result, setResult] = useState<Record<string, unknown>>({});
   const wsEvents = useCliRunStream(runId, token);
-  const lastCliRunEvent = wsEvents[wsEvents.length - 1];
 
   const loadStatic = useCallback(async () => {
     if (!runId) return;
@@ -84,20 +76,14 @@ function RunDetailLoader({ runId, token, t, children }: {
   }, [runId, token]);
 
   useEffect(() => {
-    if (!runId) {
-      setRun(undefined);
-      setDiff("");
-      setResult({});
-      return;
-    }
+    if (!runId) { setRun(undefined); setDiff(""); setResult({}); return; }
     loadStatic().catch(() => undefined);
   }, [loadStatic, runId]);
 
+  const lastEvent = wsEvents[wsEvents.length - 1];
   useEffect(() => {
-    if (lastCliRunEvent && FINAL_CLI_RUN_EVENTS.includes(lastCliRunEvent.type)) {
-      loadStatic().catch(() => undefined);
-    }
-  }, [lastCliRunEvent, loadStatic]);
+    if (lastEvent && FINAL_CLI_RUN_EVENTS.includes(lastEvent.type)) loadStatic().catch(() => undefined);
+  }, [lastEvent, loadStatic]);
 
   if (!run) return <>{children(undefined)}</>;
   return <>{children({ run, events: wsEvents, diff, result })}</>;
@@ -124,26 +110,19 @@ function AppShellWrapper({ token, setToken, lang, setLang, t }: {
     setToken("");
   }
 
-  const content = {
-    chat: <ChatPage token={token} t={t} onOpenRun={(runId) => { setSelectedCliRun(runId); }} />,
-    workers: <WorkersPage token={token} t={t} />,
-    queue: <QueuePage token={token} t={t} />,
-    cliTools: <CliToolsPage token={token} t={t} />,
+  const content: Record<PageKey, React.ReactNode> = {
+    chat: <ChatPage token={token} t={t} onOpenRun={(runId) => setSelectedCliRun(runId)} />,
     agentRuns: <AgentRunsPage token={token} t={t} selectedRunId={selectedCliRun} onSelectedRun={setSelectedCliRun} />,
-    config: <ConfigPage token={token} t={t} />,
-    schedules: <SchedulesPage token={token} t={t} />,
-    memory: <MemoryPage token={token} t={t} />,
-    files: <FilesPage token={token} t={t} />,
-    browser: <BrowserPage token={token} t={t} />,
-    logs: <LogsPage token={token} status={status.data} t={t} />
-  }[page];
+    queue: <QueuePage token={token} t={t} />,
+    settings: <SettingsPage token={token} t={t} status={status.data} />,
+  };
 
   return (
-    <RunDetailLoader runId={selectedCliRun} token={token} t={t}>
+    <RunDetailLoader runId={selectedCliRun} token={token}>
       {(runDetail) => (
         <AppShell t={t} lang={lang} setLang={setLang} page={page} setPage={setPage} onLogout={logout}
           workers={workers.data} activeTasks={activeTasks} status={status.data} runDetail={runDetail}>
-          {content}
+          {content[page]}
         </AppShell>
       )}
     </RunDetailLoader>

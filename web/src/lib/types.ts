@@ -1,4 +1,5 @@
-export type PageKey = "chat" | "workers" | "queue" | "cliTools" | "agentRuns" | "config" | "schedules" | "memory" | "files" | "browser" | "logs";
+export type PageKey = "chat" | "agentRuns" | "queue" | "settings";
+export type SettingsKey = "config" | "workers" | "cliTools" | "schedules" | "memory" | "files" | "browser" | "logs";
 export type Status = "pending" | "leased" | "running" | "succeeded" | "failed" | "canceled" | "interrupted";
 export type CliRunStatus = "pending" | "preparing" | "running" | "succeeded" | "failed" | "canceled" | "interrupted";
 export type Lang = "zh" | "en";

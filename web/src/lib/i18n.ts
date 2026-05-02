@@ -4,10 +4,6 @@ export const I18N = {
   zh: {
     "app.subtitle": "GenericAgent Web",
     "nav.chat": "对话",
-    "nav.workers": "工作进程",
-    "nav.queue": "任务队列",
-    "nav.cliTools": "CLI 工具",
-    "nav.agentRuns": "子 Agent 运行",
     "nav.config": "API 配置",
     "nav.schedules": "定时任务",
     "nav.memory": "记忆",
@@ -148,15 +144,23 @@ export const I18N = {
     "logKind.agent": "Agent",
     "logKind.browser": "浏览器",
     "topbar.config": "配置",
-    "topbar.cliRuns": "CLI"
+    "topbar.cliRuns": "CLI",
+    "nav.agentRuns": "Agent 运行",
+    "nav.queue": "任务队列",
+    "nav.settings": "设置",
+    "settings.title": "设置",
+    "settings.config": "API 配置",
+    "settings.workers": "工作进程",
+    "settings.cliTools": "CLI 工具",
+    "settings.schedules": "定时任务",
+    "settings.memory": "记忆",
+    "settings.files": "文件",
+    "settings.browser": "浏览器",
+    "settings.logs": "日志"
   },
   en: {
     "app.subtitle": "GenericAgent Web",
     "nav.chat": "Chat",
-    "nav.workers": "Workers",
-    "nav.queue": "Queue",
-    "nav.cliTools": "CLI Tools",
-    "nav.agentRuns": "Agent Runs",
     "nav.config": "API Config",
     "nav.schedules": "Schedules",
     "nav.memory": "Memory",
@@ -297,7 +301,19 @@ export const I18N = {
     "logKind.agent": "Agent",
     "logKind.browser": "Browser",
     "topbar.config": "config",
-    "topbar.cliRuns": "CLI"
+    "topbar.cliRuns": "CLI",
+    "nav.agentRuns": "Agent Runs",
+    "nav.queue": "Queue",
+    "nav.settings": "Settings",
+    "settings.title": "Settings",
+    "settings.config": "API Config",
+    "settings.workers": "Workers",
+    "settings.cliTools": "CLI Tools",
+    "settings.schedules": "Schedules",
+    "settings.memory": "Memory",
+    "settings.files": "Files",
+    "settings.browser": "Browser",
+    "settings.logs": "Logs"
   }
 } as const;
 

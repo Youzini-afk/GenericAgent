@@ -18,28 +18,34 @@ export function AppShell({
   runDetail?: { run: CliRun; events: CliRunEvent[]; diff: string; result: Record<string, unknown> };
   children: ReactNode;
 }) {
+  const showAux = !!runDetail;
+
   return (
     <div className="app-shell-root">
       <TopBar t={t} lang={lang} setLang={setLang} workers={workers} activeTasks={activeTasks} status={status} />
       <PanelGroup orientation="vertical" className="app-shell-vertical">
-        <Panel defaultSize={76} minSize={45}>
+        <Panel defaultSize={80} minSize={50}>
           <div className="app-shell-body">
             <Sidebar page={page} setPage={setPage} t={t} onLogout={onLogout} />
             <PanelGroup orientation="horizontal" className="app-shell-workspace">
-              <Panel defaultSize={70} minSize={48}>
+              <Panel defaultSize={showAux ? 68 : 100} minSize={48}>
                 <main className="app-shell-main">
                   {children}
                 </main>
               </Panel>
-              <PanelResizeHandle className="resize-handle resize-handle-vertical" />
-              <Panel defaultSize={30} minSize={18} maxSize={42}>
-                <AuxPanel t={t} runDetail={runDetail} />
-              </Panel>
+              {showAux && (
+                <>
+                  <PanelResizeHandle className="resize-handle resize-handle-vertical" />
+                  <Panel defaultSize={32} minSize={20} maxSize={45}>
+                    <AuxPanel t={t} runDetail={runDetail} />
+                  </Panel>
+                </>
+              )}
             </PanelGroup>
           </div>
         </Panel>
         <PanelResizeHandle className="resize-handle resize-handle-horizontal" />
-        <Panel defaultSize={24} minSize={5} maxSize={42}>
+        <Panel defaultSize={20} minSize={4} maxSize={40} collapsible>
           <TerminalPanel t={t} />
         </Panel>
       </PanelGroup>
