@@ -1126,7 +1126,9 @@ function LogsPage({ token, status, t }: { token: string; status?: StatusInfo; t:
   );
 }
 
-function AppShell({
+import { AppShell } from "./components/layout/AppShell";
+
+function AppShellWrapper({
   token,
   setToken,
   lang,
@@ -1166,63 +1168,16 @@ function AppShell({
   }[page];
 
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <div className="sidebar-brand">
-          <Bot size={24} />
-          <span>GenericAgent</span>
-        </div>
-        <nav>
-          {navItems.map((item) => (
-            <button className={page === item.key ? "active" : ""} key={item.key} onClick={() => setPage(item.key)}>
-              {item.icon}
-              <span>{t(item.labelKey)}</span>
-            </button>
-          ))}
-        </nav>
-        <button className="logout-btn" type="button" onClick={logout}>
-          <LogOut size={16} />
-          {t("common.logout")}
-        </button>
-      </aside>
-      <main className="main">
-        <header className="topbar">
-          <div className="topbar-title">
-            <h1>{t(navItems.find((item) => item.key === page)?.labelKey || "nav.chat")}</h1>
-            <span>{status.data?.data_dir || t("app.subtitle")}</span>
-          </div>
-          <div className="metrics">
-            <label className="language-select" title={t("common.language")}>
-              <Languages size={15} />
-              <select value={lang} onChange={(event) => setLang(event.target.value as Lang)}>
-                <option value="zh">中文</option>
-                <option value="en">English</option>
-              </select>
-            </label>
-            <span className="metric">
-              <ServerCog size={15} />
-              {workers.data.filter((worker) => worker.alive).length}/{workers.data.length || status.data?.worker_concurrency || 0}
-            </span>
-            <span className="metric">
-              <Activity size={15} />
-              {activeTasks.length}
-            </span>
-            <span className="metric">
-              <Code2 size={15} />
-              {t("topbar.cliRuns")} {status.data?.active_cli_runs ?? 0}
-            </span>
-            <span className={status.data?.configured ? "badge ok" : "badge warn"}>
-              {status.data?.configured ? <Check size={13} /> : <X size={13} />}
-              {t("topbar.config")}
-            </span>
-          </div>
-        </header>
-        <div className="content">{content}</div>
-        {(status.error || workers.error || tasks.error) && (
-          <div className="toast">{status.error || workers.error || tasks.error}</div>
-        )}
-      </main>
-    </div>
+    <AppShell
+      t={t} lang={lang} setLang={setLang}
+      page={page} setPage={setPage} onLogout={logout}
+      workers={workers.data} activeTasks={activeTasks} status={status.data}
+    >
+      {content}
+      {(status.error || workers.error || tasks.error) && (
+        <div className="toast">{status.error || workers.error || tasks.error}</div>
+      )}
+    </AppShell>
   );
 }
 
@@ -1246,5 +1201,5 @@ export default function App() {
     });
   }, [token]);
 
-  return token ? <AppShell token={token} setToken={setToken} lang={lang} setLang={setLang} t={t} /> : <Login onLogin={setToken} t={t} />;
+  return token ? <AppShellWrapper token={token} setToken={setToken} lang={lang} setLang={setLang} t={t} /> : <Login onLogin={setToken} t={t} />;
 }
